@@ -120,6 +120,6 @@ This script receives **daily updates**.
 For issues, feature requests, or contributions:
 
 * Open a [GitHub Issue](../../issues)
-* Or contact BLDR directly
+* Or contact ME directly
 
 ---
