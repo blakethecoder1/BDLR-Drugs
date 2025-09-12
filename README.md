@@ -5,6 +5,8 @@ AI-built drug selling system for **QBCore** (FiveM)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Status](https://img.shields.io/badge/Build-Stable-brightgreen)
 
+Wanna Build you own? 
+https://discord.gg/bldr
 ---
 
 ## 📦 Installation & Setup
