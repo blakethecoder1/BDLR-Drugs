@@ -2,20 +2,26 @@ fx_version 'cerulean'
 game 'gta5'
 
 author 'BLDR Team'
-description 'Enhanced Drug selling script with UI, persistence, buyer NPCs and leveling system'
+description 'bldr-drugs - drug selling with XP, persistence, police checks, tokens and logging (Stage A)'
 version '1.1.0'
 
 shared_script 'config.lua'
 
-client_script 'client.lua'
-server_script 'server.lua'
+client_scripts {
+  'client.lua'
+}
 
-ui_page 'html/ui.html'
+server_scripts {
+  '@oxmysql/lib/MySQL.lua',
+  'server.lua'
+}
+
+ui_page 'html/index.html'
+
 files {
-    'html/ui.html',
-    'html/ui.css',
-    'html/ui.js',
-    'html/assets/*'
+  'html/index.html',
+  'html/style.css',
+  'html/script.js'
 }
 
 dependencies {
@@ -23,5 +29,3 @@ dependencies {
   'ox_lib',
   'oxmysql'
 }
-
-lua54 'yes'
