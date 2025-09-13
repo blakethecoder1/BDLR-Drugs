@@ -1,40 +1,57 @@
 Config = {}
 
-Config.Drugs = {
-    { item = 'weed', label = 'Weed', basePrice = 100 },
-    { item = 'coke', label = 'Cocaine', basePrice = 300 },
-    { item = 'meth', label = 'Meth', basePrice = 250 },
+-- Resource name used in events and DB table prefixes
+Config.ResourceName = 'bldr-drugs'
+
+-- Police detection radius (units)
+Config.PoliceRadius = 200.0
+
+-- Autosave interval (ms)
+Config.AutosaveInterval = 300000 -- 5 minutes
+
+-- Sell cooldowns & limits
+Config.SellCooldownSeconds = 10
+Config.MaxSellsPerMinute = 6
+
+-- Token expiry for trade sessions (ms)
+Config.TokenExpiry = 15000 -- 15 seconds
+
+-- DB table names
+Config.DB = {
+  XPTable = 'bldr_drugs',
+  LogsTable = 'bldr_drugs_logs'
 }
 
-Config.SellLocations = {
-    { coords = vector3(1391.0, 3605.0, 35.0), radius = 50.0 },
-    { coords = vector3(55.0, -1392.0, 29.0), radius = 40.0 },
+-- Default buyer configuration (used by client for spawning)
+Config.Buyer = {
+  Models = { 'a_m_m_business_01', 'a_m_m_business_02', 'a_f_m_beach_01' },
+  SpawnDistanceMin = 18.0,
+  SpawnDistanceMax = 26.0,
+  ApproachDistance = 1.5,
+  WalkSpeed = 1.0
 }
 
+-- Sell locations (example)
+Config.SellPoints = {
+  vector3(-1171.36, -1571.65, 4.6644), -- example spot
+}
+
+-- XP levels -> multiplier mapping
 Config.Levels = {
-    { xp = 0, multiplier = 1.0 },
-    { xp = 100, multiplier = 1.1 },
-    { xp = 300, multiplier = 1.25 },
-    { xp = 700, multiplier = 1.5 },
-    { xp = 1500, multiplier = 1.75 },
+  { level = 0, xp = 0, multiplier = 1.0 },
+  { level = 1, xp = 100, multiplier = 1.05 },
+  { level = 2, xp = 300, multiplier = 1.12 },
+  { level = 3, xp = 700, multiplier = 1.2 },
+  { level = 4, xp = 1500, multiplier = 1.35 },
+  { level = 5, xp = 3000, multiplier = 1.5 },
 }
 
-Config.SellCooldown = 5 -- seconds
-Config.MaxPeds = 6
-Config.SellChance = 85 -- base
-Config.UI = { timeout = 10000 }
+-- Logging toggle
+Config.EnableLogging = true
 
--- Database
-Config.UseDatabase = true
-Config.TableName = 'bldr_drugs' -- columns: citizenid VARCHAR(50), xp INT
+-- Rate limit: minimal ms between trade token requests
+Config.MinTokenRequestInterval = 2000
 
--- Buyer NPC settings
-Config.SpawnDistance = 5.0
-Config.BuyerModel = 'a_m_m_skater_01'
-Config.BuyerTimeout = 20000 -- ms before buyer leaves
+-- Debug
+Config.Debug = false
 
--- Police detection: if number of cops nearby > this, reduce success chance
-Config.PoliceCheckRadius = 80.0
-Config.PolicePenalty = 30 -- percent penalty when cops nearby
-
-return Config
