@@ -32,3 +32,4 @@ window.addEventListener('message', function(event) {
         document.getElementById('app').classList.remove('hidden')
     }
 });
+
