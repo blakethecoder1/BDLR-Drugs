@@ -10,7 +10,14 @@
 
 ## 🚀 **What Makes This Amazing**
 
-### 🎮 **Dynamic NPC System**
+###   **Dual Interaction System**
+- **Traditional NPC Approach**: Walk up to randomly spawning NPCs for classic drug dealing
+- **Third-Eye Universal Selling**: Use qb-target to sell to ANY player, NPC, or object anywhere
+- **Smart Detection**: System automatically switches between interaction methods
+- **Zone Protection**: Blacklisted areas prevent selling in inappropriate locations
+- **Flexible Configuration**: Enable/disable either system based on server preferences
+
+###  🎮 **Dynamic NPC System**
 - **15 intelligent NPCs** spawn around players automatically
 - **Realistic AI behavior**: NPCs walk, smoke, and use phones
 - **Interactive dealing**: Approach walking NPCs instead of static locations
@@ -136,6 +143,39 @@ Each drug can be fully customized:
   maxAmount = 25,             -- Max amount per transaction
   successChance = 0.85,       -- Base success rate
   policePenalty = 0.08,       -- Success reduction per cop
+}
+```
+
+### **Third-Eye Configuration**
+Complete control over the universal selling system:
+```lua
+Config.ThirdEye = {
+  enabled = true,                    -- Enable third-eye selling
+  range = 3.0,                      -- Interaction range
+  showIcon = true,                  -- Show target icon
+  
+  -- Target Options
+  targets = {
+    peds = true,                    -- Target NPCs
+    players = true,                 -- Target other players
+    objects = false,                -- Target objects (careful!)
+  },
+  
+  -- Blacklisted Areas (no selling zones)
+  blacklistedZones = {
+    { coords = vector3(441.8, -982.0, 30.68), radius = 50.0, name = "LSPD" },
+    { coords = vector3(1854.82, 3686.5, 34.27), radius = 75.0, name = "Prison" },
+    { coords = vector3(-1096.0, -2480.0, 13.94), radius = 100.0, name = "Airport" },
+  },
+  
+  -- Models that can be targeted for selling
+  sellableModels = {
+    'a_m_m_business_01', 'a_m_y_business_01', 'a_m_y_business_02',
+    'a_f_m_business_02', 'a_m_m_bevhills_01', 'a_m_m_bevhills_02',
+    -- Add any ped models you want to be sellable targets
+  }
+}
+```
   description = 'Pure Colombian powder'
 }
 ```
@@ -145,9 +185,20 @@ Each drug can be fully customized:
 ## 🎮 **How to Play**
 
 ### **For Players**
+
+#### **Traditional NPC Method**
 1. **Find NPCs**: Walk around the city to find drug buyers (green markers if debug enabled)
 2. **Approach**: Get close to an NPC and press `[E]` to approach
 3. **Request Session**: System will create a secure trading session
+
+#### **Third-Eye Universal Method** 🎯
+1. **Aim and Target**: Look at any NPC, player, or allowed object
+2. **Open Third-Eye**: Use your targeting system (default: Alt)
+3. **Select "Sell Drugs"**: Choose the drug dealing option from the menu
+4. **Trade Interface**: Same interface opens for seamless dealing
+5. **Sell Anywhere**: No need to find specific NPCs - sell to anyone!
+
+#### **Universal Steps (Both Methods)**
 4. **Select Items**: Choose from available drugs based on your level
 5. **Set Amount**: Use +/- buttons or type amount (respects maximums)
 6. **Make Deal**: Click "Make Deal" and watch the negotiation
@@ -319,5 +370,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **🌟 Made with ❤️ by the BDLR Team**
 
 *Transform your FiveM server with the most advanced drug dealing system available!*
-
-
