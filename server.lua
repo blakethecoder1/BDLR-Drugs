@@ -234,6 +234,56 @@ local function validateAndConsumeToken(token, source)
   return true
 end
 
+-- Third-eye selling event
+RegisterServerEvent('bdlr-drugs:server:sellWithThirdEye')
+AddEventHandler('bdlr-drugs:server:sellWithThirdEye', function(targetEntity)
+    local source = source
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return end
+    
+    local citizenId = Player.PlayerData.citizenid
+    
+    debugPrint("SYSTEM", string.format("Player %s attempting third-eye sale to entity %s", GetPlayerName(source), targetEntity))
+    
+    -- Check if player has any sellable drugs
+    local hasDrugs = false
+    for _, itemData in pairs(Config.Items) do
+        local item = Player.Functions.GetItemByName(itemData.name)
+        if item and item.amount > 0 then
+            hasDrugs = true
+            break
+        end
+    end
+    
+    if not hasDrugs then
+        TriggerClientEvent('QBCore:Notify', source, 'You have no drugs to sell', 'error')
+        return
+    end
+    
+    -- Generate token for this transaction using existing system
+    local token = createTokenForSource(source)
+    
+    debugPrint("SYSTEM", string.format("Generated third-eye token for player %s", GetPlayerName(source)))
+    
+    -- Send token to client with player data
+    loadPlayerXP(citizenId, function(xpData)
+        local level = getPlayerLevel(xpData.xp)
+        local nextLevelXP = 0
+        
+        if level < #Config.XP.levels then
+            nextLevelXP = Config.XP.levels[level + 1].minXP
+        end
+        
+        TriggerClientEvent('bdlr-drugs:client:receiveToken', source, token, GetGameTimer() + Config.TokenExpiry)
+        TriggerClientEvent('bdlr-drugs:client:updatePlayerData', source, {
+            level = level,
+            title = Config.XP.levels[level].title,
+            xp = xpData.xp,
+            nextLevelXP = nextLevelXP
+        })
+    end)
+end)
+
 -- Server Events
 RegisterServerEvent(Config.ResourceName..':requestToken')
 AddEventHandler(Config.ResourceName..':requestToken', function()
@@ -456,7 +506,7 @@ QBCore.Commands.Add('checkdrugstats', 'Check drug dealing stats (admin)', {{name
     multiline = true,
     args = {"[DRUG STATS]", 
       Player.PlayerData.charinfo.firstname..' '..Player.PlayerData.charinfo.lastname..
-      '\\nLevel: '..level..' ('..levelInfo.title..')'.
+      '\\nLevel: '..level..' ('..levelInfo.title..')'..
       '\\nXP: '..data.xp..
       '\\nMultiplier: x'..multiplier..
       '\\nTotal Sales: '..data.totalSales..
