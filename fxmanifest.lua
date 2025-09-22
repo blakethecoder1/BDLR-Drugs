@@ -21,7 +21,11 @@ ui_page 'html/index.html'
 files {
   'html/index.html',
   'html/style.css',
-  'html/script.js'
+  'html/script.js',
+  'html/app.js',
+  'html/ui.css',
+  'html/ui.html',
+  'html/ui.js'
 }
 
 dependencies {
