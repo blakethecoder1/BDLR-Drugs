@@ -9,6 +9,7 @@ local playerLevel = 0
 local playerXP = 0
 local nearbyNPC = nil
 local isInteracting = false
+local thirdEyeTargets = {}
 
 -- Debug function
 local function debugPrint(...)
@@ -66,7 +67,160 @@ local function GetAvailableItems()
   return availableItems
 end
 
--- NPC Management
+-- Zone checking function
+local function IsInBlacklistedZone(coords)
+  if not Config.ThirdEye.blacklistedZones then return false end
+  
+  for _, zone in pairs(Config.ThirdEye.blacklistedZones) do
+    local distance = #(coords - zone.coords)
+    if distance <= zone.radius then
+      debugPrint("Player in blacklisted zone:", zone.name)
+      return true, zone.name
+    end
+  end
+  return false
+end
+
+-- Third-Eye Integration Functions
+local function OpenDrugSelling(data)
+  local playerCoords = GetEntityCoords(PlayerPedId())
+  local isBlacklisted, zoneName = IsInBlacklistedZone(playerCoords)
+  
+  if isBlacklisted then
+    QBCore.Functions.Notify('You cannot sell drugs in this area: ' .. zoneName, 'error')
+    return
+  end
+  
+  if currentToken then
+    -- Already have a token, open UI directly
+    SetNuiFocus(true, true)
+    SendNUIMessage({ 
+      action = 'open', 
+      playerLevel = playerLevel,
+      playerTitle = playerTitle or 'Street Rookie',
+      playerXP = playerXP,
+      nextLevelXP = nextLevelXP or 0
+    })
+  else
+    -- Request token first
+    RequestTradeToken()
+    -- Small delay then open UI
+    SetTimeout(1000, function()
+      if currentToken then
+        SetNuiFocus(true, true)
+        SendNUIMessage({ 
+          action = 'open', 
+          playerLevel = playerLevel,
+          playerTitle = playerTitle or 'Street Rookie',
+          playerXP = playerXP,
+          nextLevelXP = nextLevelXP or 0
+        })
+      end
+    end)
+  end
+end
+
+local function SetupThirdEyeTargets()
+  if not Config.ThirdEye.enabled then return end
+  
+  local targetSystem = Config.ThirdEye.useQBTarget and 'qb-target' or 'ox_target'
+  debugPrint("Setting up third-eye targets using", targetSystem)
+  
+  -- Target for peds (NPCs)
+  if Config.ThirdEye.targets.peds then
+    if Config.ThirdEye.useQBTarget then
+      exports['qb-target']:AddGlobalPed({
+        options = {
+          {
+            type = "client",
+            event = "bldr-drugs:openSelling",
+            icon = Config.ThirdEye.targetIcon,
+            label = Config.ThirdEye.targetLabel,
+            canInteract = function(entity)
+              return not IsPedAPlayer(entity)
+            end
+          }
+        },
+        distance = Config.ThirdEye.targetDistance
+      })
+    end
+  end
+  
+  -- Target for vehicles
+  if Config.ThirdEye.targets.vehicles then
+    if Config.ThirdEye.useQBTarget then
+      exports['qb-target']:AddGlobalVehicle({
+        options = {
+          {
+            type = "client",
+            event = "bldr-drugs:openSelling",
+            icon = Config.ThirdEye.targetIcon,
+            label = Config.ThirdEye.targetLabel,
+          }
+        },
+        distance = Config.ThirdEye.targetDistance
+      })
+    end
+  end
+  
+  -- Target for specific object models
+  if Config.ThirdEye.targets.objects and Config.ThirdEye.targetModels then
+    if Config.ThirdEye.useQBTarget then
+      exports['qb-target']:AddTargetModel(Config.ThirdEye.targetModels, {
+        options = {
+          {
+            type = "client",
+            event = "bldr-drugs:openSelling",
+            icon = Config.ThirdEye.targetIcon,
+            label = Config.ThirdEye.targetLabel,
+          }
+        },
+        distance = Config.ThirdEye.targetDistance
+      })
+    end
+  end
+  
+  -- Freeaim targeting (sell anywhere)
+  if Config.ThirdEye.targets.freeaim then
+    if Config.ThirdEye.useQBTarget then
+      exports['qb-target']:AddGlobalPlayer({
+        options = {
+          {
+            type = "client",
+            event = "bldr-drugs:openSelling",
+            icon = Config.ThirdEye.targetIcon,
+            label = Config.ThirdEye.targetLabel .. " (Freeaim)",
+            canInteract = function(entity)
+              -- Only allow on self for freeaim selling
+              return entity == PlayerPedId()
+            end
+          }
+        },
+        distance = Config.ThirdEye.targetDistance
+      })
+    end
+  end
+end
+
+local function RemoveThirdEyeTargets()
+  if not Config.ThirdEye.enabled then return end
+  
+  if Config.ThirdEye.useQBTarget then
+    exports['qb-target']:RemoveGlobalPed("Sell Drugs")
+    exports['qb-target']:RemoveGlobalVehicle("Sell Drugs")
+    exports['qb-target']:RemoveGlobalPlayer("Sell Drugs")
+    if Config.ThirdEye.targetModels then
+      exports['qb-target']:RemoveTargetModel(Config.ThirdEye.targetModels, Config.ThirdEye.targetLabel)
+    end
+  end
+end
+
+-- Event handlers for third-eye
+RegisterNetEvent('bldr-drugs:openSelling', function(data)
+  OpenDrugSelling(data)
+end)
+
+-- NPC Management (Keep existing system as backup/additional option)
 local function CreateDrugNPC(coords, model)
   local hash = GetHashKey(model)
   
@@ -101,19 +255,24 @@ local function CreateDrugNPC(coords, model)
 end
 
 local function SpawnNPCsAroundPlayer()
-  if #activeNPCs >= Config.NPCs.maxActive then
+  -- Only spawn NPCs if third-eye is disabled or as additional option
+  if Config.ThirdEye.enabled and Config.ThirdEye.sellAnywhere then
+    -- Reduce NPC spawning when third-eye is available
+    if #activeNPCs >= math.floor(Config.NPCs.maxActive / 3) then
+      return
+    end
+  elseif #activeNPCs >= Config.NPCs.maxActive then
     return
   end
   
   local playerCoords = GetEntityCoords(PlayerPedId())
   local spawnAttempts = 0
-  local maxAttempts = 10
+  local maxAttempts = 5  -- Reduced attempts when third-eye available
   
-  while #activeNPCs < Config.NPCs.maxActive and spawnAttempts < maxAttempts do
+  while #activeNPCs < (Config.ThirdEye.enabled and math.floor(Config.NPCs.maxActive / 3) or Config.NPCs.maxActive) and spawnAttempts < maxAttempts do
     spawnAttempts = spawnAttempts + 1
     
     if math.random() < Config.NPCs.spawnChance then
-      -- Generate random spawn position
       local angle = math.random() * 2 * math.pi
       local distance = math.random(Config.NPCs.spawnRadius * 0.5, Config.NPCs.spawnRadius)
       local spawnCoords = {
@@ -122,12 +281,10 @@ local function SpawnNPCsAroundPlayer()
         z = playerCoords.z
       }
       
-      -- Find ground Z coordinate
       local foundGround, groundZ = GetGroundZFor_3dCoord(spawnCoords.x, spawnCoords.y, spawnCoords.z + 50.0, false)
       if foundGround then
         spawnCoords.z = groundZ
         
-        -- Check if spawn location is clear
         local _, isPositionClear = GetClosestVehicle(spawnCoords.x, spawnCoords.y, spawnCoords.z, 5.0, 0, 71)
         if isPositionClear == 0 then
           local model = Config.NPCs.models[math.random(1, #Config.NPCs.models)]
@@ -144,7 +301,7 @@ local function SpawnNPCsAroundPlayer()
             }
             
             table.insert(activeNPCs, npcData)
-            debugPrint("Spawned NPC", #activeNPCs, "/", Config.NPCs.maxActive)
+            debugPrint("Spawned NPC", #activeNPCs, "/", (Config.ThirdEye.enabled and math.floor(Config.NPCs.maxActive / 3) or Config.NPCs.maxActive))
           end
         end
       end
@@ -295,12 +452,13 @@ RegisterCommand('bldr_debug_npcs', function()
   end
 end)
 
--- Main interaction thread
+-- Main interaction thread (modified for third-eye compatibility)
 Citizen.CreateThread(function()
   while true do
     Citizen.Wait(500)
     
-    if not isInteracting then
+    -- Only show traditional NPC interactions if third-eye is disabled or as backup
+    if not Config.ThirdEye.enabled and not isInteracting then
       local foundNPC, distance = FindNearestNPC()
       nearbyNPC = foundNPC
       
@@ -315,28 +473,18 @@ Citizen.CreateThread(function()
         DrawText3D(npcCoords.x, npcCoords.y, npcCoords.z + 1.2, '[E] Approach Buyer')
         
         if IsControlJustReleased(0, 38) then -- E key
-          if currentToken then
-            SetNuiFocus(true, true)
-            SendNUIMessage({ 
-              action = 'open', 
-              playerLevel = playerLevel,
-              playerTitle = playerTitle or 'Street Rookie',
-              playerXP = playerXP,
-              nextLevelXP = nextLevelXP or 0
-            })
-          else
-            RequestTradeToken()
-          end
+          OpenDrugSelling()
         end
       end
     end
   end
 end)
 
--- NPC management thread
+-- NPC management thread (reduced frequency when third-eye enabled)
 Citizen.CreateThread(function()
   while true do
-    Citizen.Wait(Config.NPCs.checkInterval)
+    local interval = Config.ThirdEye.enabled and Config.NPCs.checkInterval * 2 or Config.NPCs.checkInterval
+    Citizen.Wait(interval)
     SpawnNPCsAroundPlayer()
     CleanupNPCs()
   end
@@ -350,6 +498,15 @@ Citizen.CreateThread(function()
       currentToken = nil
       QBCore.Functions.Notify('Trade session expired', 'error')
     end
+  end
+end)
+
+-- Third-eye initialization
+Citizen.CreateThread(function()
+  Wait(2000) -- Wait for dependencies to load
+  if Config.ThirdEye.enabled then
+    SetupThirdEyeTargets()
+    debugPrint("Third-eye drug selling system initialized")
   end
 end)
 
@@ -371,6 +528,10 @@ end
 AddEventHandler('onResourceStop', function(resName)
   if resName ~= GetCurrentResourceName() then return end
   
+  -- Remove third-eye targets
+  RemoveThirdEyeTargets()
+  
+  -- Cleanup NPCs
   for _, npcData in pairs(activeNPCs) do
     if DoesEntityExist(npcData.entity) then
       DeleteEntity(npcData.entity)
@@ -378,5 +539,5 @@ AddEventHandler('onResourceStop', function(resName)
   end
   
   activeNPCs = {}
-  debugPrint("Cleaned up all NPCs on resource stop")
+  debugPrint("Cleaned up all NPCs and targets on resource stop")
 end)
