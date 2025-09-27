@@ -1,5 +1,10 @@
 local QBCore = exports['qb-core']:GetCoreObject()
-local MySQL = exports['oxmysql']
+
+-- ESX support for black money (if ESX is available)
+local ESX = nil
+if GetResourceState('es_extended') == 'started' then
+  ESX = exports['es_extended']:getSharedObject()
+end
 
 local playerXP = {} -- in-memory cache: citizenid -> xp
 local tokenStore = {} -- token -> {source, expires}
@@ -27,6 +32,7 @@ local function ensureTables()
   local xpTable = Config.DB.XPTable
   local logsTable = Config.DB.LogsTable
 
+  -- First, create tables if they don't exist
   local createXP = ([[
     CREATE TABLE IF NOT EXISTS %s (
       citizenid VARCHAR(50) NOT NULL PRIMARY KEY,
@@ -61,18 +67,33 @@ local function ensureTables()
     );
   ]]):format(logsTable)
 
-  MySQL.execute(createXP, {}, function(affected)
+  exports.oxmysql:execute(createXP, function(affected)
     debugPrint('general', 'ensureTables XP result', affected)
+    
+    -- After creating table, add missing columns if they don't exist
+    local alterQueries = {
+      ("ALTER TABLE %s ADD COLUMN IF NOT EXISTS total_sales INT DEFAULT 0;"):format(xpTable),
+      ("ALTER TABLE %s ADD COLUMN IF NOT EXISTS total_earned INT DEFAULT 0;"):format(xpTable),
+      ("ALTER TABLE %s ADD COLUMN IF NOT EXISTS last_sale TIMESTAMP NULL;"):format(xpTable),
+      ("ALTER TABLE %s ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;"):format(xpTable),
+      ("ALTER TABLE %s ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;"):format(xpTable)
+    }
+    
+    for _, query in pairs(alterQueries) do
+      exports.oxmysql:execute(query, function(result)
+        debugPrint('general', 'ALTER TABLE result:', result)
+      end)
+    end
   end)
 
-  MySQL.execute(createLogs, {}, function(affected)
+  exports.oxmysql:execute(createLogs, function(affected)
     debugPrint('general', 'ensureTables Logs result', affected)
   end)
 end
 
 -- Player XP management
 local function loadPlayerXP(citizenid, cb)
-  MySQL.query('SELECT * FROM '..Config.DB.XPTable..' WHERE citizenid = ?', {citizenid}, function(result)
+  exports.oxmysql:query('SELECT * FROM '..Config.DB.XPTable..' WHERE citizenid = ?', {citizenid}, function(result)
     if result and result[1] then
       playerXP[citizenid] = {
         xp = tonumber(result[1].xp) or 0,
@@ -83,7 +104,7 @@ local function loadPlayerXP(citizenid, cb)
       if cb then cb(playerXP[citizenid].xp) end
     else
       -- insert default
-      MySQL.execute('INSERT INTO '..Config.DB.XPTable..' (citizenid, xp) VALUES (?, ?)', {citizenid, 0}, function()
+      exports.oxmysql:execute('INSERT INTO '..Config.DB.XPTable..' (citizenid, xp) VALUES (?, ?)', {citizenid, 0}, function()
         playerXP[citizenid] = { xp = 0, totalSales = 0, totalEarned = 0 }
         if cb then cb(0) end
       end)
@@ -93,7 +114,7 @@ end
 
 local function savePlayerXP(citizenid)
   local data = playerXP[citizenid] or { xp = 0, totalSales = 0, totalEarned = 0 }
-  MySQL.execute('UPDATE '..Config.DB.XPTable..' SET xp = ?, total_sales = ?, total_earned = ?, last_sale = NOW() WHERE citizenid = ?', 
+  exports.oxmysql:execute('UPDATE '..Config.DB.XPTable..' SET xp = ?, total_sales = ?, total_earned = ?, last_sale = NOW() WHERE citizenid = ?', 
     {data.xp, data.totalSales, data.totalEarned, citizenid}, function(affected)
       debugPrint('xp', 'Saved XP for', citizenid, data.xp)
     end)
@@ -103,7 +124,7 @@ end
 local function logSale(data)
   if not Config.EnableLogging then return end
   
-  MySQL.execute([[
+  exports.oxmysql:execute([[
     INSERT INTO ]] .. Config.DB.LogsTable .. [[ 
     (citizenid, item, amount, base_price, final_price, xpEarned, level_before, level_after, success, reason, x, y, z, nearbyCops, success_chance) 
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -266,19 +287,32 @@ AddEventHandler('bdlr-drugs:server:sellWithThirdEye', function(targetEntity)
     debugPrint("SYSTEM", string.format("Generated third-eye token for player %s", GetPlayerName(source)))
     
     -- Send token to client with player data
-    loadPlayerXP(citizenId, function(xpData)
-        local level = getPlayerLevel(xpData.xp)
+    loadPlayerXP(citizenId, function(xp)
+        local level, multiplier = getPlayerLevel(xp)
         local nextLevelXP = 0
         
-        if level < #Config.XP.levels then
-            nextLevelXP = Config.XP.levels[level + 1].minXP
+        -- Find next level XP requirement
+        for i = 1, #Config.Levels do
+            if Config.Levels[i].level > level then
+                nextLevelXP = Config.Levels[i].xp
+                break
+            end
+        end
+        
+        -- Get level title
+        local title = "Street Rookie"
+        for i = 1, #Config.Levels do
+            if Config.Levels[i].level == level then
+                title = Config.Levels[i].title
+                break
+            end
         end
         
         TriggerClientEvent('bdlr-drugs:client:receiveToken', source, token, GetGameTimer() + Config.TokenExpiry)
         TriggerClientEvent('bdlr-drugs:client:updatePlayerData', source, {
             level = level,
-            title = Config.XP.levels[level].title,
-            xp = xpData.xp,
+            title = title,
+            xp = xp,
             nextLevelXP = nextLevelXP
         })
     end)
@@ -296,6 +330,18 @@ AddEventHandler(Config.ResourceName..':requestToken', function()
   local token = createTokenForSource(src)
   TriggerClientEvent(Config.ResourceName..':tokenResponse', src, true, token, Config.TokenExpiry)
   debugPrint('general', 'Token created for source', src)
+end)
+
+RegisterServerEvent(Config.ResourceName..':requestPlayerStats')
+AddEventHandler(Config.ResourceName..':requestPlayerStats', function()
+  local src = source
+  local Player = QBCore.Functions.GetPlayer(src)
+  if not Player then return end
+  
+  loadPlayerXP(Player.PlayerData.citizenid, function(xp)
+    TriggerClientEvent(Config.ResourceName..':updatePlayerStats', src, xp)
+    debugPrint('general', 'Player stats sent to', src, 'XP:', xp)
+  end)
 end)
 
 -- Enhanced sell completion
@@ -394,13 +440,55 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
   
   if success then
     -- Remove items and give money
-    local removed = Player.Functions.RemoveItem(itemName, amount, nil, true)
+    debugPrint('sales', 'Attempting to remove item:', 'item=', itemName, 'amount=', amount, 'player=', src)
+    local removed = Player.Functions.RemoveItem(itemName, amount, nil, "drug-sale")
+    debugPrint('sales', 'Remove item result:', removed)
     if not removed then
       success = false
       reasonFail = 'remove_failed'
       debugPrint('sales', 'Failed to remove items for', src)
     else
-      Player.Functions.AddMoney('cash', finalPrice)
+      -- Handle money/reward based on config
+      local rewardGiven = false
+      
+      if Config.Money.useMarkedBills and math.random() <= Config.Money.markedBillsChance then
+        -- Give markedbills instead of direct money
+        local markedBillsGiven = Player.Functions.AddItem(Config.Money.markedBillsItem, finalPrice, nil, "drug-sale")
+        if markedBillsGiven then
+          rewardGiven = true
+          debugPrint('sales', 'Gave markedbills:', finalPrice, 'to player', src)
+        end
+      end
+      
+      -- If markedbills failed or not configured, give money directly
+      if not rewardGiven then
+        if Config.Money.type == 'black_money' then
+          -- ESX black money support
+          local xPlayer = ESX.GetPlayerFromId(src)
+          if xPlayer then
+            xPlayer.addAccountMoney('black_money', finalPrice)
+            rewardGiven = true
+            debugPrint('sales', 'Gave black money:', finalPrice, 'to player', src)
+          end
+        elseif Config.Money.type == 'crypto' then
+          -- Crypto currency (if supported by your server)
+          Player.Functions.AddMoney('crypto', finalPrice, "drug-sale")
+          rewardGiven = true
+          debugPrint('sales', 'Gave crypto:', finalPrice, 'to player', src)
+        else
+          -- Standard QBCore money types: 'cash', 'bank'
+          Player.Functions.AddMoney(Config.Money.type, finalPrice, "drug-sale")
+          rewardGiven = true
+          debugPrint('sales', 'Gave', Config.Money.type..':', finalPrice, 'to player', src)
+        end
+      end
+      
+      if not rewardGiven then
+        -- Fallback to cash if everything else failed
+        Player.Functions.AddMoney('cash', finalPrice, "drug-sale")
+        debugPrint('sales', 'Fallback: gave cash:', finalPrice, 'to player', src)
+      end
+      
       xpGain = (itemConfig.xpPerUnit or 5) * amount
       local oldXP, newXP = addXP(cid, xpGain)
       addEarnings(cid, finalPrice)
@@ -435,12 +523,32 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
     successChance = successChance
   })
 
+  -- Prepare reward information for client notification
+  local rewardInfo = {
+    type = 'none',
+    amount = finalPrice
+  }
+  
+  if success then
+    if Config.Money.useMarkedBills and math.random() <= Config.Money.markedBillsChance then
+      rewardInfo.type = 'markedbills'
+    elseif Config.Money.type == 'black_money' then
+      rewardInfo.type = 'black_money'
+    elseif Config.Money.type == 'crypto' then
+      rewardInfo.type = 'crypto'
+    else
+      rewardInfo.type = Config.Money.type
+    end
+  end
+
   cb(success, {
     price = finalPrice,
     xp = getXP(cid),
     level = getPlayerLevel(getXP(cid)),
     reason = reasonFail,
-    xpGained = xpGain
+    xpGained = xpGain,
+    moneyEarned = success and finalPrice or 0,
+    reward = rewardInfo
   })
 end)
 
@@ -499,7 +607,16 @@ QBCore.Commands.Add('checkdrugstats', 'Check drug dealing stats (admin)', {{name
   local cid = Player.PlayerData.citizenid
   local data = playerXP[cid] or { xp = 0, totalSales = 0, totalEarned = 0 }
   local level, multiplier = getPlayerLevel(data.xp)
-  local levelInfo = Config.Levels[level + 1] or Config.Levels[#Config.Levels]
+  
+  -- Find the level info
+  local levelInfo = nil
+  for i = 1, #Config.Levels do
+    if Config.Levels[i].level == level then
+      levelInfo = Config.Levels[i]
+      break
+    end
+  end
+  levelInfo = levelInfo or Config.Levels[1] -- fallback to first level
   
   TriggerClientEvent('chat:addMessage', source, {
     color = {0, 255, 0},
