@@ -5,7 +5,7 @@ Config.ResourceName = 'bldr-drugs'
 
 -- Debug settings
 Config.Debug = {
-  enabled = true,
+  enabled = false,         -- Master debug toggle - set to false to disable ALL debug output
   showNPCs = true,        -- Show NPC debug info
   showSales = true,       -- Show sale transactions
   showSpawning = true,    -- Show NPC spawning/despawning
@@ -15,6 +15,19 @@ Config.Debug = {
   drawMarkers = true,     -- Draw 3D markers for NPCs
   printToConsole = true,  -- Print debug to server console
   printToChat = false     -- Print debug to player chat
+}
+
+-- Money & Reward Configuration
+Config.Money = {
+  type = 'cash',           -- 'cash', 'bank', 'crypto', 'black_money'
+  useMarkedBills = true,   -- Give markedbills instead of direct money
+  markedBillsChance = 0.8, -- 80% chance to get markedbills, 20% cash
+  markedBillsItem = 'markedbills', -- Item name for marked bills
+  
+  -- Alternative money types (comment out type above and uncomment one below)
+  -- type = 'black_money',  -- ESX black money
+  -- type = 'crypto',       -- Crypto currency
+  -- type = 'bank',         -- Bank money (clean)
 }
 
 -- Police detection radius (units)
@@ -48,6 +61,11 @@ Config.NPCs = {
   walkRadius = 50.0,        -- How far NPCs will walk from spawn point
   lifetimeMin = 60000,      -- Minimum NPC lifetime (ms)
   lifetimeMax = 180000,     -- Maximum NPC lifetime (ms)
+  
+  -- NPC cooldown system
+  sellCooldown = 300000,    -- 5 minutes before you can sell to same NPC again (ms)
+  showCooldownMarker = true,-- Show visual marker on NPCs you recently dealt with
+  cooldownMessage = true,   -- Show notification when trying to sell to cooldown NPC
   
   -- NPC models (will be randomly selected)
   models = {
@@ -155,5 +173,21 @@ Config.EnableLogging = true
 Config.Notifications = {
   position = 'top-right',  -- top-left, top-right, bottom-left, bottom-right
   duration = 4000          -- milliseconds
+}
+
+-- Third Eye / Target System Configuration
+Config.ThirdEye = {
+  enabled = true,              -- Set to true to enable third-eye targeting
+  useQBTarget = true,          -- true for qb-target, false for ox_target
+  targetIcon = 'fa-solid fa-cannabis', -- icon for third-eye
+  targetLabel = 'Sell Drugs',  -- label for third-eye
+  targetDistance = 2.5,        -- interaction distance
+  targets = {
+    peds = true,               -- Allow targeting NPCs
+    vehicles = false,          -- Allow targeting vehicles
+    objects = false            -- Allow targeting objects
+  },
+  targetModels = {},           -- add model hashes if using object targeting
+  blacklistedZones = {}        -- add zone names if needed
 }
 
