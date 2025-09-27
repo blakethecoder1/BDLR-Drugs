@@ -10,6 +10,7 @@ local playerXP = 0
 local nearbyNPC = nil
 local isInteracting = false
 local thirdEyeTargets = {}
+local npcCooldowns = {} -- Track NPCs we've recently dealt with: {entityId: expireTime}
 
 -- Debug function
 local function debugPrint(...)
@@ -27,6 +28,46 @@ local function debugPrint(...)
   end
 end
 
+-- NPC Cooldown Management
+local function IsNPCOnCooldown(entity)
+  if not DoesEntityExist(entity) then return false end
+  
+  local entityId = NetworkGetNetworkIdFromEntity(entity)
+  local currentTime = GetGameTimer()
+  
+  -- Clean up expired cooldowns
+  for id, expireTime in pairs(npcCooldowns) do
+    if currentTime > expireTime then
+      npcCooldowns[id] = nil
+    end
+  end
+  
+  return npcCooldowns[entityId] and currentTime < npcCooldowns[entityId]
+end
+
+local function SetNPCCooldown(entity)
+  if not DoesEntityExist(entity) then return end
+  
+  local entityId = NetworkGetNetworkIdFromEntity(entity)
+  local expireTime = GetGameTimer() + Config.NPCs.sellCooldown
+  npcCooldowns[entityId] = expireTime
+  
+  debugPrint("Set cooldown for NPC", entityId, "expires in", Config.NPCs.sellCooldown, "ms")
+end
+
+local function GetNPCCooldownTimeLeft(entity)
+  if not DoesEntityExist(entity) then return 0 end
+  
+  local entityId = NetworkGetNetworkIdFromEntity(entity)
+  local currentTime = GetGameTimer()
+  
+  if npcCooldowns[entityId] and currentTime < npcCooldowns[entityId] then
+    return math.ceil((npcCooldowns[entityId] - currentTime) / 1000) -- Return seconds
+  end
+  
+  return 0
+end
+
 -- Helper functions
 local function GetPlayerLevelInfo(xp)
   local level = 0
@@ -39,9 +80,15 @@ local function GetPlayerLevelInfo(xp)
       level = Config.Levels[i].level
       title = Config.Levels[i].title
       multiplier = Config.Levels[i].multiplier
-      if Config.Levels[i + 1] then
-        nextLevelXP = Config.Levels[i + 1].xp
-      else
+      
+      -- Find next level XP requirement
+      for j = 1, #Config.Levels do
+        if Config.Levels[j].level > level then
+          nextLevelXP = Config.Levels[j].xp
+          break
+        end
+      end
+      if nextLevelXP == 0 then
         nextLevelXP = xp -- Max level
       end
       break
@@ -53,8 +100,12 @@ end
 
 local function GetAvailableItems()
   local availableItems = {}
+  local currentLevel = playerLevel or 0 -- Fallback to 0 if playerLevel is nil
+  
+  debugPrint("Getting available items for level:", currentLevel)
+  
   for itemName, itemConfig in pairs(Config.Items) do
-    if playerLevel >= itemConfig.minLevel then
+    if currentLevel >= itemConfig.minLevel then
       table.insert(availableItems, {
         name = itemName,
         label = itemConfig.label,
@@ -64,6 +115,8 @@ local function GetAvailableItems()
       })
     end
   end
+  
+  debugPrint("Found", #availableItems, "available items")
   return availableItems
 end
 
@@ -93,7 +146,8 @@ local function OpenDrugSelling(data)
   
   if currentToken then
     -- Already have a token, open UI directly
-    SetNuiFocus(true, true)
+    debugPrint("Opening UI with existing token")
+    SetNuiFocus(true, true)  -- Enable both keyboard and mouse
     SendNUIMessage({ 
       action = 'open', 
       playerLevel = playerLevel,
@@ -103,11 +157,13 @@ local function OpenDrugSelling(data)
     })
   else
     -- Request token first
+    debugPrint("Requesting token before opening UI")
     RequestTradeToken()
     -- Small delay then open UI
     SetTimeout(1000, function()
       if currentToken then
-        SetNuiFocus(true, true)
+        debugPrint("Opening UI after token received")
+        SetNuiFocus(true, true)  -- Enable both keyboard and mouse
         SendNUIMessage({ 
           action = 'open', 
           playerLevel = playerLevel,
@@ -115,6 +171,8 @@ local function OpenDrugSelling(data)
           playerXP = playerXP,
           nextLevelXP = nextLevelXP or 0
         })
+      else
+        debugPrint("Failed to get token, not opening UI")
       end
     end)
   end
@@ -217,6 +275,36 @@ end
 
 -- Event handlers for third-eye
 RegisterNetEvent('bldr-drugs:openSelling', function(data)
+  -- If we have entity data (third-eye interaction), make NPC face player
+  if data and data.entity and DoesEntityExist(data.entity) and not IsPedAPlayer(data.entity) then
+    -- Check if this NPC is on cooldown
+    if IsNPCOnCooldown(data.entity) then
+      local timeLeft = GetNPCCooldownTimeLeft(data.entity)
+      if Config.NPCs.cooldownMessage then
+        QBCore.Functions.Notify('This person isn\'t interested right now. Try again in ' .. timeLeft .. ' seconds.', 'error', 3000)
+      end
+      return -- Don't proceed with opening the selling UI
+    end
+    
+    -- Clear NPC tasks and make them face the player
+    ClearPedTasks(data.entity)
+    TaskTurnPedToFaceEntity(data.entity, PlayerPedId(), -1)
+    
+    -- Set them as the nearby NPC for selling interaction
+    nearbyNPC = {
+      entity = data.entity,
+      isInteracting = false,
+      spawnCoords = GetEntityCoords(data.entity)
+    }
+    
+    -- Add a brief conversation animation
+    SetTimeout(800, function()
+      if DoesEntityExist(data.entity) then
+        TaskStartScenarioInPlace(data.entity, "WORLD_HUMAN_STAND_MOBILE", 0, true)
+      end
+    end)
+  end
+  
   OpenDrugSelling(data)
 end)
 
@@ -352,13 +440,30 @@ end
 
 -- NUI Callbacks
 RegisterNUICallback('requestSell', function(data, cb)
+  debugPrint("Sell request received:", json.encode(data))
+  
   if not currentToken then 
+    debugPrint("No token available")
     cb({ success = false, reason = 'no_token' }) 
     return 
   end
   
   if not nearbyNPC then
+    debugPrint("No nearby NPC")
     cb({ success = false, reason = 'no_buyer' })
+    return
+  end
+  
+  -- Check if NPC is on cooldown
+  if IsNPCOnCooldown(nearbyNPC.entity) then
+    local timeLeft = GetNPCCooldownTimeLeft(nearbyNPC.entity)
+    debugPrint("NPC is on cooldown for", timeLeft, "more seconds")
+    
+    if Config.NPCs.cooldownMessage then
+      QBCore.Functions.Notify('This person isn\'t interested right now. Try again in ' .. timeLeft .. ' seconds.', 'error', 3000)
+    end
+    
+    cb({ success = false, reason = 'npc_cooldown', timeLeft = timeLeft })
     return
   end
   
@@ -366,42 +471,146 @@ RegisterNUICallback('requestSell', function(data, cb)
   local payload = { 
     token = currentToken, 
     item = data.item, 
-    amount = tonumber(data.amount) or 0, 
+    amount = tonumber(data.amount) or 1, 
     coords = {x = playerCoords.x, y = playerCoords.y, z = playerCoords.z}
   }
   
-  -- Mark NPC as interacting
+  debugPrint("Sending sell request with payload:", json.encode(payload))
+  
+  -- Mark NPC as interacting and stop them
   nearbyNPC.isInteracting = true
   isInteracting = true
   
-  -- Make NPC look at player
-  TaskTurnPedToFaceEntity(nearbyNPC.entity, PlayerPedId(), Config.NPCs.interactionTime)
+  -- Enhanced NPC interaction behavior
+  if DoesEntityExist(nearbyNPC.entity) then
+    -- Clear any existing tasks
+    ClearPedTasks(nearbyNPC.entity)
+    
+    -- Make NPC look at player immediately
+    TaskTurnPedToFaceEntity(nearbyNPC.entity, PlayerPedId(), -1)
+    
+    -- Add a brief delay then make them do a conversation gesture
+    SetTimeout(500, function()
+      if DoesEntityExist(nearbyNPC.entity) and nearbyNPC.isInteracting then
+        -- Play talking animation
+        TaskStartScenarioInPlace(nearbyNPC.entity, "WORLD_HUMAN_STAND_MOBILE_UPRIGHT", 0, true)
+        
+        -- Make sure they keep looking at player during conversation
+        SetTimeout(1000, function()
+          if DoesEntityExist(nearbyNPC.entity) and nearbyNPC.isInteracting then
+            TaskLookAtEntity(nearbyNPC.entity, PlayerPedId(), Config.NPCs.interactionTime * 1000, 0, 2)
+          end
+        end)
+      end
+    end)
+  end
   
-  QBCore.Functions.TriggerCallback(Config.ResourceName..':completeSale', function(success, resp)
-    cb({ success = success, resp = resp })
+  QBCore.Functions.TriggerCallback(Config.ResourceName..':completeSale', function(success, result)
+    debugPrint("Sell callback result:", success, json.encode(result or {}))
+    
+    -- Always send a proper response to prevent JSON errors
+    local response = {
+      success = success or false,
+      reason = (result and result.reason) or 'unknown error',
+      xpGained = (result and result.xpGained) or 0,
+      moneyEarned = (result and result.moneyEarned) or 0
+    }
+    
+    cb(response)
+    
     if success then
       currentToken = nil
-      QBCore.Functions.Notify('Deal completed successfully!', 'success')
+      
+      -- Enhanced success notification with reward info
+      local rewardText = ""
+      if result and result.reward then
+        local rewardType = result.reward.type
+        local amount = result.reward.amount
+        
+        if rewardType == 'markedbills' then
+          rewardText = " | Received $" .. amount .. " in marked bills 💰"
+        elseif rewardType == 'black_money' then
+          rewardText = " | Received $" .. amount .. " dirty money 🖤"
+        elseif rewardType == 'crypto' then
+          rewardText = " | Received $" .. amount .. " in crypto 💎"
+        elseif rewardType == 'bank' then
+          rewardText = " | Received $" .. amount .. " (banked) 🏦"
+        elseif rewardType == 'cash' then
+          rewardText = " | Received $" .. amount .. " cash 💵"
+        end
+      end
+      
+      local xpText = ""
+      if result and result.xpGained and result.xpGained > 0 then
+        xpText = " | +" .. result.xpGained .. " XP 📈"
+      end
+      
+      QBCore.Functions.Notify('Deal completed successfully!' .. rewardText .. xpText, 'success', 5000)
+      
+      -- Set cooldown on this NPC
+      if nearbyNPC and DoesEntityExist(nearbyNPC.entity) then
+        SetNPCCooldown(nearbyNPC.entity)
+      end
+      
+      -- Update player stats if provided
+      if result and result.xp then
+        playerXP = result.xp
+        playerLevel, playerTitle, playerMultiplier, nextLevelXP = GetPlayerLevelInfo(playerXP)
+      end
     else
-      QBCore.Functions.Notify('Deal failed: ' .. (resp.reason or 'unknown'), 'error')
+      QBCore.Functions.Notify('Deal failed: ' .. (response.reason or 'unknown'), 'error')
     end
     
-    -- Reset interaction state
-    isInteracting = false
-    if nearbyNPC then
-      nearbyNPC.isInteracting = false
-    end
+    -- Reset interaction state after a delay
+    Citizen.SetTimeout(2000, function()
+      isInteracting = false
+      if nearbyNPC and DoesEntityExist(nearbyNPC.entity) then
+        nearbyNPC.isInteracting = false
+        
+        -- Clear any conversation animations/tasks
+        ClearPedTasks(nearbyNPC.entity)
+        
+        if success then
+          -- If deal was successful, make NPC walk away casually
+          SetTimeout(500, function()
+            if DoesEntityExist(nearbyNPC.entity) then
+              -- Give them a small wave animation first
+              TaskPlayAnim(nearbyNPC.entity, "gestures@m@standing@casual", "gesture_bye_soft", 3.0, 3.0, 2000, 48, 0.0, 0, 0, 0)
+              
+              -- After wave, make them walk away
+              SetTimeout(2500, function()
+                if DoesEntityExist(nearbyNPC.entity) then
+                  -- Walk away from player
+                  local playerCoords = GetEntityCoords(PlayerPedId())
+                  local npcCoords = GetEntityCoords(nearbyNPC.entity)
+                  local direction = npcCoords - playerCoords
+                  direction = direction / #direction -- normalize
+                  local walkAwayCoords = npcCoords + direction * 10.0
+                  
+                  TaskGoToCoordAnyMeans(nearbyNPC.entity, walkAwayCoords.x, walkAwayCoords.y, walkAwayCoords.z, 1.0, 0, 0, 786603, 0xbf800000)
+                end
+              end)
+            end
+          end)
+        else
+          -- If deal failed, make NPC look disappointed and resume normal behavior
+          SetTimeout(500, function()
+            if DoesEntityExist(nearbyNPC.entity) then
+              -- Shrug animation
+              TaskPlayAnim(nearbyNPC.entity, "gestures@m@standing@casual", "gesture_shrug_hard", 2.0, 2.0, 2000, 48, 0.0, 0, 0, 0)
+              
+              -- After shrug, resume wandering
+              SetTimeout(3000, function()
+                if DoesEntityExist(nearbyNPC.entity) then
+                  TaskWanderInArea(nearbyNPC.entity, nearbyNPC.spawnCoords.x, nearbyNPC.spawnCoords.y, nearbyNPC.spawnCoords.z, Config.NPCs.walkRadius, 1.0, 120.0)
+                end
+              end)
+            end
+          end)
+        end
+      end
+    end)
   end, payload)
-end)
-
-RegisterNUICallback('close', function(data, cb)
-  SetNuiFocus(false, false)
-  SendNUIMessage({ action = 'close' })
-  cb('ok')
-end)
-
-RegisterNUICallback('getAvailableItems', function(data, cb)
-  cb({ items = GetAvailableItems() })
 end)
 
 -- Server Events
@@ -437,6 +646,92 @@ function RequestTradeToken()
   TriggerServerEvent(Config.ResourceName..':requestToken')
 end
 
+-- Initialize player stats when resource starts
+Citizen.CreateThread(function()
+  Wait(2000) -- Wait for core to be ready
+  debugPrint("Initializing bldr-drugs client...")
+  TriggerServerEvent(Config.ResourceName..':requestPlayerStats')
+end)
+
+-- Load animations for NPC interactions
+Citizen.CreateThread(function()
+  RequestAnimDict("gestures@m@standing@casual")
+  while not HasAnimDictLoaded("gestures@m@standing@casual") do
+    Wait(100)
+  end
+  debugPrint("Gesture animations loaded")
+end)
+
+-- Event to handle when player spawns/loads
+RegisterNetEvent('QBCore:Client:OnPlayerLoaded')
+AddEventHandler('QBCore:Client:OnPlayerLoaded', function()
+  Wait(1000)
+  debugPrint("Player loaded, requesting stats...")
+  TriggerServerEvent(Config.ResourceName..':requestPlayerStats')
+end)
+
+-- NUI Callbacks (registered early to ensure availability)
+RegisterNUICallback('getAvailableItems', function(data, cb)
+  debugPrint("NUI callback: getAvailableItems requested")
+  local items = GetAvailableItems()
+  debugPrint("Available items count:", #items)
+  
+  -- Log the response for debugging
+  if Config.Debug.enabled then
+    for i, item in pairs(items) do
+      debugPrint("Item", i..":", item.name, item.label, "Level req:", item.minLevel or 0)
+    end
+  end
+  
+  cb({ items = items })
+end)
+
+-- Test callback to verify NUI communication
+RegisterNUICallback('test', function(data, cb)
+  debugPrint("NUI test callback working!")
+  cb({ success = true, message = "NUI communication working" })
+end)
+
+-- Request player stats callback
+RegisterNUICallback('requestPlayerStats', function(data, cb)
+  debugPrint("NUI requesting player stats, current level:", playerLevel)
+  TriggerServerEvent(Config.ResourceName..':requestPlayerStats')
+  cb({ success = true })
+end)
+
+-- Ready callback for when NUI loads
+RegisterNUICallback('ready', function(data, cb)
+  debugPrint("NUI ready callback received")
+  cb({ success = true })
+end)
+
+-- Add throttling to prevent spam
+local lastCloseTime = 0
+
+RegisterNUICallback('close', function(data, cb)
+  local currentTime = GetGameTimer()
+  
+  -- Prevent spam by throttling close calls
+  if currentTime - lastCloseTime < 100 then -- 100ms throttle
+    cb('ok')
+    return
+  end
+  
+  lastCloseTime = currentTime
+  debugPrint("NUI close callback called")
+  
+  -- Immediately release focus
+  SetNuiFocus(false, false)
+  
+  -- Send close message
+  SendNUIMessage({ action = 'close' })
+  
+  -- Reset interaction state
+  isInteracting = false
+  
+  cb('ok')
+end)
+
 -- Commands for testing
 RegisterCommand('bldr_request_token', function()
   RequestTradeToken()
@@ -452,6 +747,55 @@ RegisterCommand('bldr_debug_npcs', function()
   end
 end)
 
+-- Emergency command to fix stuck NUI focus
+RegisterCommand('bldr_fix_ui', function()
+  SetNuiFocus(false, false)
+  SendNUIMessage({ action = 'close' })
+  isInteracting = false
+  
+  -- Force enable movement
+  DisableControlAction(0, 1, false) -- LookLeftRight
+  DisableControlAction(0, 2, false) -- LookUpDown
+  DisableControlAction(0, 30, false) -- MoveLeftRight
+  DisableControlAction(0, 31, false) -- MoveUpDown
+  
+  print("[BLDR-DRUGS] UI focus manually released - you should be able to move now")
+end)
+
+-- Add a thread to monitor for stuck UI focus (disabled for now to allow proper UI interaction)
+--[[ This was interfering with normal UI operation
+Citizen.CreateThread(function()
+  while true do
+    Wait(1000)
+    
+    -- Check if NUI focus is active but UI should be closed
+    if not isInteracting then
+      -- Release any lingering focus
+      SetNuiFocus(false, false)
+    end
+  end
+end)
+--]]
+
+-- Debug resource name
+RegisterCommand('bldr_debug_resource', function()
+  print("[BLDR-DRUGS] Resource name should be: " .. GetCurrentResourceName())
+  print("[BLDR-DRUGS] Config resource name: " .. Config.ResourceName)
+end)
+
+-- Test NUI communication
+RegisterCommand('bldr_test_nui', function()
+  print("[BLDR-DRUGS] Testing NUI communication...")
+  SetNuiFocus(true, true)
+  SendNUIMessage({ 
+    action = 'open', 
+    playerLevel = playerLevel or 0,
+    playerTitle = playerTitle or 'Street Rookie',
+    playerXP = playerXP or 0,
+    nextLevelXP = 100
+  })
+end)
+
 -- Main interaction thread (modified for third-eye compatibility)
 Citizen.CreateThread(function()
   while true do
@@ -463,17 +807,30 @@ Citizen.CreateThread(function()
       nearbyNPC = foundNPC
       
       if nearbyNPC then
+        local npcCoords = GetEntityCoords(nearbyNPC.entity)
+        local npcOnCooldown = IsNPCOnCooldown(nearbyNPC.entity)
+        
         if Config.Debug.enabled and Config.Debug.drawMarkers then
-          local npcCoords = GetEntityCoords(nearbyNPC.entity)
-          DrawMarker(1, npcCoords.x, npcCoords.y, npcCoords.z + 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.5, 0, 255, 0, 100, false, true, 2, nil, nil, false)
+          -- Green marker for available NPCs, red for cooldown NPCs
+          local r, g, b = npcOnCooldown and 255 or 0, npcOnCooldown and 0 or 255, 0
+          DrawMarker(1, npcCoords.x, npcCoords.y, npcCoords.z + 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.5, r, g, b, 100, false, true, 2, nil, nil, false)
+        end
+        
+        -- Show cooldown markers even when debug is off
+        if npcOnCooldown and Config.NPCs.showCooldownMarker then
+          DrawMarker(1, npcCoords.x, npcCoords.y, npcCoords.z + 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3, 0.3, 0.3, 255, 0, 0, 150, false, true, 2, nil, nil, false)
         end
         
         -- Show interaction prompt
-        local npcCoords = GetEntityCoords(nearbyNPC.entity)
-        DrawText3D(npcCoords.x, npcCoords.y, npcCoords.z + 1.2, '[E] Approach Buyer')
-        
-        if IsControlJustReleased(0, 38) then -- E key
-          OpenDrugSelling()
+        if npcOnCooldown then
+          local timeLeft = GetNPCCooldownTimeLeft(nearbyNPC.entity)
+          DrawText3D(npcCoords.x, npcCoords.y, npcCoords.z + 1.2, '⏰ Not interested (' .. timeLeft .. 's)')
+        else
+          DrawText3D(npcCoords.x, npcCoords.y, npcCoords.z + 1.2, '[E] Approach Buyer')
+          
+          if IsControlJustReleased(0, 38) then -- E key
+            OpenDrugSelling()
+          end
         end
       end
     end
