@@ -12,6 +12,29 @@ local isInteracting = false
 local thirdEyeTargets = {}
 local npcCooldowns = {} -- Track NPCs we've recently dealt with: {entityId: expireTime}
 
+-- Custom notification function with improved visibility
+local function CustomNotify(text, type, duration)
+  if Config.Notifications.useCustom then
+    -- Use improved notification system with better colors
+    local notifyType = type or 'info'
+    local notifyDuration = duration or Config.Notifications.duration
+    
+    -- Convert type to ensure compatibility
+    if notifyType == 'primary' then notifyType = 'info' end
+    
+    -- Use exports to send a custom styled notification
+    if exports['qb-core'] and exports['qb-core'].Notify then
+      exports['qb-core']:Notify(text, notifyType, notifyDuration)
+    else
+      -- Fallback to TriggerEvent if exports don't work
+      TriggerEvent('QBCore:Notify', text, notifyType, notifyDuration)
+    end
+  else
+    -- Use default QBCore notification
+    QBCore.Functions.Notify(text, type, duration)
+  end
+end
+
 -- Debug function
 local function debugPrint(...)
   if Config.Debug.enabled and Config.Debug.printToConsole then
@@ -26,6 +49,84 @@ local function debugPrint(...)
       args = {"[DEBUG]", message}
     })
   end
+end
+
+-- NPC Filtering System
+local function IsNPCAllowed(entity)
+  if not Config.NPCs.filteringEnabled then
+    return true -- No filtering enabled
+  end
+  
+  if not DoesEntityExist(entity) or IsPedAPlayer(entity) then
+    return false
+  end
+  
+  local model = GetEntityModel(entity)
+  local modelName = GetHashKey(model) -- Get hash for comparison
+  
+  -- Convert model hashes to strings for comparison
+  local function modelInList(modelList)
+    for _, checkModel in pairs(modelList) do
+      if GetHashKey(checkModel) == model then
+        return true
+      end
+    end
+    return false
+  end
+  
+  -- Check vehicle restriction
+  if Config.NPCs.blockVehicleNPCs and IsPedInAnyVehicle(entity, false) then
+    return false
+  end
+  
+  -- Check mission NPC restriction  
+  if Config.NPCs.blockMissionNPCs and IsPedAMissionPed(entity) then
+    return false
+  end
+  
+  -- Check distance from shops if configured
+  if Config.NPCs.minDistanceFromShops > 0.0 then
+    local pedCoords = GetEntityCoords(entity)
+    -- Add shop locations that you want to avoid (customize as needed)
+    local shopLocations = {
+      vector3(25.7, -1347.3, 29.49),     -- LTD Downtown
+      vector3(-3038.71, 585.9, 7.9),     -- LTD Inseno Road
+      vector3(-3241.91, 1001.46, 12.83), -- LTD Barbareno Road
+      vector3(1728.66, 6414.16, 35.04),  -- LTD Senora Freeway
+      vector3(1697.99, 4924.4, 42.06),   -- LTD Grapeseed Main St
+      vector3(1961.48, 3739.96, 32.34),  -- LTD Sandy Shores
+      vector3(547.79, 2671.79, 42.16),   -- LTD Route 68
+      vector3(2679.25, 3280.12, 55.24),  -- LTD Senora Freeway
+      vector3(2557.94, 382.05, 108.62),  -- LTD Palomino Freeway
+      vector3(373.55, 325.56, 103.56),   -- 24/7 Supermarket Clinton Ave
+      vector3(811.24, -775.0, 26.17),    -- Ammunation
+      vector3(842.44, -1033.42, 28.19),  -- Ammunation La Mesa
+      -- Add more shop coordinates as needed
+    }
+    
+    for _, shopCoords in pairs(shopLocations) do
+      if #(pedCoords - shopCoords) < Config.NPCs.minDistanceFromShops then
+        return false
+      end
+    end
+  end
+  
+  -- Apply filtering based on mode
+  if Config.NPCs.filterMode == 'blacklist' then
+    -- Blacklist mode: allow all except blacklisted
+    if modelInList(Config.NPCs.blacklistedModels) then
+      return false
+    end
+    return true
+  elseif Config.NPCs.filterMode == 'whitelist' then
+    -- Whitelist mode: only allow whitelisted
+    if #Config.NPCs.whitelistedModels == 0 then
+      return true -- Empty whitelist means allow all
+    end
+    return modelInList(Config.NPCs.whitelistedModels)
+  end
+  
+  return true -- Default: allow
 end
 
 -- NPC Cooldown Management
@@ -140,7 +241,7 @@ local function OpenDrugSelling(data)
   local isBlacklisted, zoneName = IsInBlacklistedZone(playerCoords)
   
   if isBlacklisted then
-    QBCore.Functions.Notify('You cannot sell drugs in this area: ' .. zoneName, 'error')
+    CustomNotify('You cannot sell drugs in this area: ' .. zoneName, 'error')
     return
   end
   
@@ -195,7 +296,7 @@ local function SetupThirdEyeTargets()
             icon = Config.ThirdEye.targetIcon,
             label = Config.ThirdEye.targetLabel,
             canInteract = function(entity)
-              return not IsPedAPlayer(entity)
+              return IsNPCAllowed(entity)
             end
           }
         },
@@ -277,11 +378,17 @@ end
 RegisterNetEvent('bldr-drugs:openSelling', function(data)
   -- If we have entity data (third-eye interaction), make NPC face player
   if data and data.entity and DoesEntityExist(data.entity) and not IsPedAPlayer(data.entity) then
+    -- Check if this NPC is allowed for selling
+    if not IsNPCAllowed(data.entity) then
+      CustomNotify('This person is not interested in your business', 'error', 3000)
+      return
+    end
+    
     -- Check if this NPC is on cooldown
     if IsNPCOnCooldown(data.entity) then
       local timeLeft = GetNPCCooldownTimeLeft(data.entity)
       if Config.NPCs.cooldownMessage then
-        QBCore.Functions.Notify('This person isn\'t interested right now. Try again in ' .. timeLeft .. ' seconds.', 'error', 3000)
+        CustomNotify('This person isn\'t interested right now. Try again in ' .. timeLeft .. ' seconds.', 'error', 3000)
       end
       return -- Don't proceed with opening the selling UI
     end
@@ -460,7 +567,7 @@ RegisterNUICallback('requestSell', function(data, cb)
     debugPrint("NPC is on cooldown for", timeLeft, "more seconds")
     
     if Config.NPCs.cooldownMessage then
-      QBCore.Functions.Notify('This person isn\'t interested right now. Try again in ' .. timeLeft .. ' seconds.', 'error', 3000)
+      CustomNotify('This person isn\'t interested right now. Try again in ' .. timeLeft .. ' seconds.', 'error', 3000)
     end
     
     cb({ success = false, reason = 'npc_cooldown', timeLeft = timeLeft })
@@ -545,7 +652,7 @@ RegisterNUICallback('requestSell', function(data, cb)
         xpText = " | +" .. result.xpGained .. " XP 📈"
       end
       
-      QBCore.Functions.Notify('Deal completed successfully!' .. rewardText .. xpText, 'success', 5000)
+      CustomNotify('Deal completed successfully!' .. rewardText .. xpText, 'success', 5000)
       
       -- Set cooldown on this NPC
       if nearbyNPC and DoesEntityExist(nearbyNPC.entity) then
@@ -558,7 +665,7 @@ RegisterNUICallback('requestSell', function(data, cb)
         playerLevel, playerTitle, playerMultiplier, nextLevelXP = GetPlayerLevelInfo(playerXP)
       end
     else
-      QBCore.Functions.Notify('Deal failed: ' .. (response.reason or 'unknown'), 'error')
+      CustomNotify('Deal failed: ' .. (response.reason or 'unknown'), 'error')
     end
     
     -- Reset interaction state after a delay
@@ -617,12 +724,12 @@ end)
 RegisterNetEvent(Config.ResourceName..':tokenResponse')
 AddEventHandler(Config.ResourceName..':tokenResponse', function(ok, tokenOrReason, expiry)
   if not ok then
-    QBCore.Functions.Notify('Failed to get trade token: '..tostring(tokenOrReason), 'error')
+    CustomNotify('Failed to get trade token: '..tostring(tokenOrReason), 'error')
     return
   end
   currentToken = tokenOrReason
   tokenExpiry = GetGameTimer() + (expiry or Config.TokenExpiry)
-  QBCore.Functions.Notify('Trade session ready - Find a buyer!', 'success')
+  CustomNotify('Trade session ready - Find a buyer!', 'success')
 end)
 
 RegisterNetEvent(Config.ResourceName..':updatePlayerStats')
@@ -639,7 +746,7 @@ end)
 function RequestTradeToken()
   local now = GetGameTimer()
   if now - lastTokenRequest < Config.MinTokenRequestInterval then
-    QBCore.Functions.Notify('Please wait before requesting another session', 'error')
+    CustomNotify('Please wait before requesting another session', 'error')
     return
   end
   lastTokenRequest = now
@@ -853,7 +960,7 @@ Citizen.CreateThread(function()
     Citizen.Wait(1000)
     if currentToken and GetGameTimer() > tokenExpiry then
       currentToken = nil
-      QBCore.Functions.Notify('Trade session expired', 'error')
+      CustomNotify('Trade session expired', 'error')
     end
   end
 end)
@@ -880,6 +987,52 @@ function DrawText3D(x, y, z, text)
   DrawText(0.0, 0.0)
   ClearDrawOrigin()
 end
+
+-- Custom notification event handler
+RegisterNetEvent('bldr-drugs:notify', function(text, type, duration)
+  CustomNotify(text, type, duration)
+end)
+
+-- Debug command to identify NPC models (for adding to blacklist)
+RegisterCommand('checknpc', function()
+  local playerPed = PlayerPedId()
+  local coords = GetEntityCoords(playerPed)
+  local closestPed = nil
+  local closestDistance = 10.0
+  
+  local handle, ped = FindFirstPed()
+  local success = true
+  
+  while success do
+    if ped ~= playerPed and not IsPedAPlayer(ped) then
+      local pedCoords = GetEntityCoords(ped)
+      local distance = #(coords - pedCoords)
+      if distance < closestDistance then
+        closestDistance = distance
+        closestPed = ped
+      end
+    end
+    success, ped = FindNextPed(handle)
+  end
+  
+  EndFindPed(handle)
+  
+  if closestPed then
+    local model = GetEntityModel(closestPed)
+    local modelName = GetHashKey(model)
+    local allowed = IsNPCAllowed(closestPed)
+    local inVehicle = IsPedInAnyVehicle(closestPed, false)
+    local isMission = IsPedAMissionPed(closestPed)
+    
+    CustomNotify(string.format('NPC Info: Model=%s | Allowed=%s | InVehicle=%s | Mission=%s', 
+      modelName, tostring(allowed), tostring(inVehicle), tostring(isMission)), 'info', 8000)
+    
+    print('[bldr-drugs] NPC Model Hash:', model)
+    print('[bldr-drugs] NPC Model Name (for config):', modelName)
+  else
+    CustomNotify('No NPC found nearby', 'error', 3000)
+  end
+end, false)
 
 -- Cleanup on resource stop
 AddEventHandler('onResourceStop', function(resName)
