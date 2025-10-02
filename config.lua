@@ -67,6 +67,39 @@ Config.NPCs = {
   showCooldownMarker = true,-- Show visual marker on NPCs you recently dealt with
   cooldownMessage = true,   -- Show notification when trying to sell to cooldown NPC
   
+  -- NPC Filtering System
+  filteringEnabled = true,  -- Enable NPC filtering (recommended)
+  filterMode = 'blacklist', -- 'blacklist' = block specific NPCs, 'whitelist' = only allow specific NPCs
+  
+  -- Blacklist: NPCs you CANNOT sell to (shop keepers, essential NPCs, etc.)
+  blacklistedModels = {
+    -- Shop keepers and store NPCs
+    'mp_m_shopkeep_01', 'cs_old_man1a', 'cs_old_man2', 's_m_m_shopkeeper_01',
+    's_f_m_shop_high', 's_f_y_shop_low', 's_f_y_shop_mid', 's_m_y_shop_mask',
+    
+    -- Gas station attendants
+    'mp_m_freemode_01', 'ig_manuel', 'cs_manuel',
+    
+    -- Ammunation clerks
+    'cs_hunter', 's_m_y_ammucity_01',
+    
+    -- Car dealership
+    'cs_carbuyer', 'ig_car3guy1', 'ig_car3guy2',
+    
+    -- Add more as needed - check model names in-game
+  },
+  
+  -- Whitelist: ONLY these NPCs can be sold to (leave empty if using blacklist)
+  whitelistedModels = {
+    -- Only enable this if you want to restrict to specific models
+    -- 'a_m_m_business_01', 'a_f_m_business_02', etc.
+  },
+  
+  -- Additional filtering options
+  blockVehicleNPCs = true,  -- Don't allow selling to NPCs in vehicles
+  blockMissionNPCs = true,  -- Don't allow selling to mission-critical NPCs
+  minDistanceFromShops = 50.0, -- Minimum distance from shops/stores to sell (0.0 to disable)
+  
   -- NPC models (will be randomly selected)
   models = {
     'a_m_m_business_01', 'a_m_m_business_02', 'a_f_m_beach_01',
@@ -171,8 +204,15 @@ Config.EnableLogging = true
 
 -- Notification settings
 Config.Notifications = {
-  position = 'top-right',  -- top-left, top-right, bottom-left, bottom-right
-  duration = 4000          -- milliseconds
+  position = 'top-right',      -- top-left, top-right, bottom-left, bottom-right
+  duration = 4000,             -- milliseconds
+  useCustom = true,            -- Use custom bright notifications instead of default QBCore green
+  customColors = {
+    success = '#00ffff',       -- Bright cyan instead of green
+    error = '#ff6666',         -- Bright red
+    info = '#66ccff',          -- Bright blue
+    warning = '#ffaa00'        -- Orange
+  }
 }
 
 -- Third Eye / Target System Configuration
@@ -190,4 +230,3 @@ Config.ThirdEye = {
   targetModels = {},           -- add model hashes if using object targeting
   blacklistedZones = {}        -- add zone names if needed
 }
-
