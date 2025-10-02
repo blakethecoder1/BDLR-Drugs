@@ -1,9 +1,9 @@
-# 🌿 BLDR-Drugs v2.5 - Advanced Drug Dealing System
+# 🌿 BLDR-Drugs v2.6 - Advanced Drug Dealing System
 **Next-Generation Drug Dealing for QBCore FiveM Servers**
 
 ![FiveM](https://img.shields.io/badge/FiveM-QBCore-green)
 ![License](https://img.shields.io/badge/License-MIT-blue)
-![Version](https://img.shields.io/badge/Version-2.5-brightgreen)
+![Version](https://img.shields.io/badge/Version-2.6-brightgreen)
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-success)
 
 ---
@@ -16,6 +16,14 @@
 - **Smart Detection**: System automatically switches between interaction methods
 - **Zone Protection**: Blacklisted areas prevent selling in inappropriate locations
 - **Flexible Configuration**: Enable/disable either system based on server preferences
+
+### 🚫 **Smart NPC Filtering System** (NEW in v2.6)
+- **Anti-Shop Protection**: Prevents selling to shop keepers, gas station workers, and other inappropriate NPCs
+- **Blacklist System**: Pre-configured list of NPCs that won't buy drugs (24/7 stores, Ammunation, etc.)
+- **Distance Filtering**: 50-meter safe zone around shops and legitimate businesses
+- **Vehicle Protection**: Blocks selling to NPCs sitting in cars
+- **Mission NPC Protection**: Safeguards story-important characters
+- **Admin Tools**: `/checknpc` command to identify and add NPCs to blacklist
 
 ### � **Enhanced NPC Interactions**
 - **Smart Looking System**: NPCs stop and face you when selling
@@ -117,6 +125,30 @@ Config.ThirdEye = {
 }
 ```
 
+### 🚫 **NPC Filtering Configuration** (NEW in v2.6)
+```lua
+Config.NPCs = {
+  -- NPC Filtering System
+  filteringEnabled = true,  -- Enable NPC filtering (recommended)
+  filterMode = 'blacklist', -- 'blacklist' = block specific NPCs, 'whitelist' = only allow specific NPCs
+  
+  -- Blacklist: NPCs you CANNOT sell to
+  blacklistedModels = {
+    'mp_m_shopkeep_01',     -- Shop keepers
+    's_m_m_shopkeeper_01',  -- Store NPCs
+    'ig_manuel',            -- Gas station workers
+    'cs_hunter',            -- Ammunation clerks
+    'cs_carbuyer',          -- Car dealers
+    -- Add more as needed
+  },
+  
+  -- Additional filtering options
+  blockVehicleNPCs = true,        -- Don't allow selling to NPCs in vehicles
+  blockMissionNPCs = true,        -- Don't allow selling to mission-critical NPCs
+  minDistanceFromShops = 50.0,    -- Minimum distance from shops/stores to sell (0.0 to disable)
+}
+```
+
 ---
 
 ## 🎮 **Admin Commands**
@@ -125,6 +157,11 @@ Config.ThirdEye = {
 ```bash
 /adddrugxp [player_id] [xp_amount]    # Give XP to player
 /checkdrugstats [player_id]           # Check player's drug stats
+```
+
+### 🚫 **NPC Filtering Tools** (NEW)
+```bash
+/checknpc                             # Identify nearby NPC models for blacklist
 ```
 
 ### 🐛 **Debug Controls**
