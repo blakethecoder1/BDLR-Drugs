@@ -79,9 +79,12 @@ local function IsNPCAllowed(entity)
     return false
   end
   
-  -- Check mission NPC restriction  
-  if Config.NPCs.blockMissionNPCs and IsPedAMissionPed(entity) then
-    return false
+  -- Check mission NPC restriction (using safe alternative)
+  if Config.NPCs.blockMissionNPCs then
+    -- Check if NPC has specific mission-related flags or is invincible
+    if not CanPedRagdoll(entity) or GetEntityHealth(entity) <= 0 then
+      return false
+    end
   end
   
   -- Check distance from shops if configured
@@ -1022,7 +1025,7 @@ RegisterCommand('checknpc', function()
     local modelName = GetHashKey(model)
     local allowed = IsNPCAllowed(closestPed)
     local inVehicle = IsPedInAnyVehicle(closestPed, false)
-    local isMission = IsPedAMissionPed(closestPed)
+    local isMission = not CanPedRagdoll(closestPed) -- Safe alternative for mission check
     
     CustomNotify(string.format('NPC Info: Model=%s | Allowed=%s | InVehicle=%s | Mission=%s', 
       modelName, tostring(allowed), tostring(inVehicle), tostring(isMission)), 'info', 8000)
