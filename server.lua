@@ -10,6 +10,9 @@ local playerXP = {} -- in-memory cache: citizenid -> xp
 local tokenStore = {} -- token -> {source, expires}
 local sellHistory = {} -- source -> {timestamps...} used for rate limiting
 
+-- Evolution system table
+local BLDR_Evolution = {}
+
 -- Debug logging function
 local function debugPrint(category, ...)
   if Config.Debug.enabled then
@@ -348,15 +351,23 @@ end)
 QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(source, cb, data)
   local src = source
   local Player = QBCore.Functions.GetPlayer(src)
-  if not Player then cb(false, {reason = 'no_player'}) return end
+  if not Player then 
+    debugPrint('sales', 'No player found for source', src)
+    cb(false, {reason = 'no_player'}) 
+    return 
+  end
+
+  debugPrint('sales', 'Starting sale for player', src, 'with data:', json.encode(data))
 
   -- Token validation
   local valid, reason = validateAndConsumeToken(data.token, src)
   if not valid then 
-    debugPrint('sales', 'Token validation failed for', src, reason)
+    debugPrint('sales', 'Token validation failed for', src, 'reason:', reason)
     cb(false, {reason = reason}) 
     return 
   end
+
+  debugPrint('sales', 'Token validation passed for', src)
 
   -- Rate limiting
   local can, r = canSell(src)
@@ -487,7 +498,7 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
         -- Fallback to cash if everything else failed
         Player.Functions.AddMoney('cash', finalPrice, "drug-sale")
         debugPrint('sales', 'Fallback: gave cash:', finalPrice, 'to player', src)
-      end
+end
       
       xpGain = (itemConfig.xpPerUnit or 5) * amount
       local oldXP, newXP = addXP(cid, xpGain)
@@ -496,6 +507,14 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
       
       -- Update client stats
       TriggerClientEvent(Config.ResourceName..':updatePlayerStats', src, newXP)
+      
+      -- Record sale for evolution system (safely)
+      local ok, err = pcall(function()
+        BLDR_Evolution.RecordSale(src, cid, itemName, amount, finalPrice)
+      end)
+      if not ok then
+        debugPrint('sales', 'Evolution record sale error:', err)
+      end
       
       debugPrint('sales', 'Successful sale:', 'player=', src, 'item=', itemName, 'amount=', amount, 'price=', finalPrice, 'xp=', xpGain)
     end
@@ -540,6 +559,8 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
       rewardInfo.type = Config.Money.type
     end
   end
+
+  debugPrint('sales', 'Preparing callback response for', src, 'success:', success, 'reason:', reasonFail)
 
   cb(success, {
     price = finalPrice,
@@ -637,6 +658,322 @@ QBCore.Commands.Add('drugdebug', 'Toggle drug debug mode (admin)', {}, false, fu
   TriggerClientEvent('QBCore:Notify', source, 'Drug debug mode: '..(Config.Debug.enabled and 'ON' or 'OFF'), 'primary')
 end, 'admin')
 
+-- Admin command to manually record a drug sale for testing evolution system
+QBCore.Commands.Add('testevorecord', 'Manually record a drug sale for evolution testing (admin)', {
+  {name='playerid', help='player id'}, 
+  {name='item', help='drug item name (weed, cocaine, meth, etc)'}, 
+  {name='amount', help='amount sold'}, 
+  {name='revenue', help='revenue earned'}
+}, true, function(source, args)
+  local playerId = tonumber(args[1])
+  local itemName = args[2]
+  local amount = tonumber(args[3]) or 1
+  local revenue = tonumber(args[4]) or 100
+  
+  if not playerId or not itemName then
+    TriggerClientEvent('QBCore:Notify', source, 'Usage: /testevorecord [playerid] [item] [amount] [revenue]', 'error')
+    return
+  end
+  
+  local Player = QBCore.Functions.GetPlayer(playerId)
+  if not Player then
+    TriggerClientEvent('QBCore:Notify', source, 'Player not found', 'error')
+    return
+  end
+  
+  local citizenId = Player.PlayerData.citizenid
+  
+  -- Record the sale in evolution system
+  local ok, err = pcall(function()
+    BLDR_Evolution.RecordSale(playerId, citizenId, itemName, amount, revenue)
+  end)
+  
+  if ok then
+    TriggerClientEvent('QBCore:Notify', source, string.format('✅ Test sale recorded: %dx %s for $%d revenue (Player: %s)', 
+      amount, itemName, revenue, Player.PlayerData.charinfo.firstname), 'success')
+    debugPrint('sales', 'Admin test sale recorded:', 'player=', playerId, 'item=', itemName, 'amount=', amount, 'revenue=', revenue)
+  else
+    TriggerClientEvent('QBCore:Notify', source, 'Error recording test sale: ' .. tostring(err), 'error')
+    debugPrint('sales', 'Admin test sale error:', err)
+  end
+end, 'admin')
+
+-- Admin command to quickly test evolution unlocks
+QBCore.Commands.Add('testevounlock', 'Test evolution unlock by giving revenue/count (admin)', {
+  {name='playerid', help='player id'}, 
+  {name='type', help='revenue or count'}, 
+  {name='item', help='item name (for count type)'}, 
+  {name='amount', help='amount to add'}
+}, true, function(source, args)
+  local playerId = tonumber(args[1])
+  local unlockType = args[2] -- 'revenue' or 'count'
+  local itemName = args[3] -- only needed for count type
+  local amount = tonumber(args[4]) or 1000
+  
+  if not playerId or not unlockType then
+    TriggerClientEvent('QBCore:Notify', source, 'Usage: /testevounlock [playerid] [revenue|count] [item] [amount]', 'error')
+    return
+  end
+  
+  local Player = QBCore.Functions.GetPlayer(playerId)
+  if not Player then
+    TriggerClientEvent('QBCore:Notify', source, 'Player not found', 'error')
+    return
+  end
+  
+  local citizenId = Player.PlayerData.citizenid
+  
+  if unlockType == 'revenue' then
+    -- Add revenue directly
+    local ok, err = pcall(function()
+      BLDR_Evolution.RecordSale(playerId, citizenId, 'test_item', 1, amount)
+    end)
+    
+    if ok then
+      TriggerClientEvent('QBCore:Notify', source, string.format('✅ Added $%d revenue for testing (Player: %s)', 
+        amount, Player.PlayerData.charinfo.firstname), 'success')
+    else
+      TriggerClientEvent('QBCore:Notify', source, 'Error adding revenue: ' .. tostring(err), 'error')
+    end
+    
+  elseif unlockType == 'count' then
+    if not itemName then
+      TriggerClientEvent('QBCore:Notify', source, 'Item name required for count type', 'error')
+      return
+    end
+    
+    -- Add item count
+    local ok, err = pcall(function()
+      BLDR_Evolution.RecordSale(playerId, citizenId, itemName, amount, 1)
+    end)
+    
+    if ok then
+      TriggerClientEvent('QBCore:Notify', source, string.format('✅ Added %d %s sales for testing (Player: %s)', 
+        amount, itemName, Player.PlayerData.charinfo.firstname), 'success')
+    else
+      TriggerClientEvent('QBCore:Notify', source, 'Error adding item count: ' .. tostring(err), 'error')
+    end
+  else
+    TriggerClientEvent('QBCore:Notify', source, 'Type must be "revenue" or "count"', 'error')
+  end
+end, 'admin')
+
+-- Admin command to test evolution crafting
+QBCore.Commands.Add('testevocraft', 'Test evolution crafting (admin)', {
+  {name='playerid', help='player id'}, 
+  {name='recipe', help='recipe key (recipe_evo_weed_lvl1, recipe_evo_cocaine_lvl1, recipe_evo_meth_lvl1)'}
+}, true, function(source, args)
+  local playerId = tonumber(args[1])
+  local recipeKey = args[2]
+  
+  if not playerId or not recipeKey then
+    TriggerClientEvent('QBCore:Notify', source, 'Usage: /testevocraft [playerid] [recipe_key]', 'error')
+    return
+  end
+  
+  local Player = QBCore.Functions.GetPlayer(playerId)
+  if not Player then
+    TriggerClientEvent('QBCore:Notify', source, 'Player not found', 'error')
+    return
+  end
+  
+  -- Trigger the crafting event for the target player
+  TriggerClientEvent('bldr-drugs:triggerCraft', playerId, recipeKey)
+  TriggerClientEvent('QBCore:Notify', source, string.format('Triggered crafting: %s for player %s', recipeKey, Player.PlayerData.charinfo.firstname), 'success')
+end, 'admin')
+
+-- Debug command to check what's actually unlocked in database
+QBCore.Commands.Add('debugunlocks', 'Debug evolution unlocks (admin)', {
+  {name='playerid', help='player id'}
+}, true, function(source, args)
+  local playerId = tonumber(args[1]) or source
+  local Player = QBCore.Functions.GetPlayer(playerId)
+  if not Player then
+    TriggerClientEvent('QBCore:Notify', source, 'Player not found', 'error')
+    return
+  end
+  
+  local citizenId = Player.PlayerData.citizenid
+  
+  -- Check all possible unlock keys
+  local unlockKeys = {'recipe_evo_weed_lvl1', 'recipe_evo_cocaine_lvl1', 'recipe_evo_meth_lvl1', 'evo_weed_lvl1', 'evo_cocaine_lvl1', 'evo_meth_lvl1'}
+  
+  for _, key in ipairs(unlockKeys) do
+    exports.oxmysql:single('SELECT unlocked FROM drug_evolution_unlocks WHERE citizenid = ? AND key_name = ?', { citizenId, key }, function(row)
+      -- Use the same logic as evoIsUnlocked function
+      local unlocked = row and (row.unlocked == 1 or row.unlocked == true)
+      print(string.format('[DEBUG] Player %s (%s) - Key: %s - Unlocked: %s - Raw value: %s', Player.PlayerData.charinfo.firstname, citizenId, key, tostring(unlocked), tostring(row and row.unlocked)))
+      TriggerClientEvent('chat:addMessage', source, {
+        color = {255, 255, 0},
+        multiline = false,
+        args = {"[DEBUG]", string.format('%s: %s', key, unlocked and 'UNLOCKED' or 'LOCKED')}
+      })
+    end)
+  end
+end, 'admin')
+
+-- Test the exact same syntax as evoSetUnlocked
+QBCore.Commands.Add('testexactsyntax', 'Test exact evoSetUnlocked syntax (admin)', {}, true, function(source, args)
+  local testCitizenId = "SYNTAX_TEST_" .. os.time()
+  local testKey = "test_recipe_key"
+  
+  print("[DEBUG testexactsyntax] Testing exact syntax with citizenid:", testCitizenId)
+  TriggerClientEvent('chat:addMessage', source, {
+    color = {255, 255, 0},
+    args = {"[SYNTAXTEST]", "Testing exact evoSetUnlocked syntax..."}
+  })
+  
+  -- Use the EXACT same query as evoSetUnlocked
+  exports.oxmysql:insert([[
+    INSERT INTO drug_evolution_unlocks (citizenid, key_name, unlocked, meta)
+    VALUES (?, ?, 1, NULL)
+    ON DUPLICATE KEY UPDATE unlocked = 1
+  ]], { testCitizenId, testKey }, function(result, error)
+    if error then
+      print("[DEBUG testexactsyntax] ERROR:", error)
+      TriggerClientEvent('chat:addMessage', source, {
+        color = {255, 0, 0},
+        args = {"[SYNTAXTEST]", "ERROR: " .. tostring(error)}
+      })
+    else
+      print("[DEBUG testexactsyntax] SUCCESS - insertId:", result and result.insertId, "affectedRows:", result and result.affectedRows)
+      TriggerClientEvent('chat:addMessage', source, {
+        color = {0, 255, 0},
+        args = {"[SYNTAXTEST]", "SUCCESS! insertId: " .. tostring(result and result.insertId)}
+      })
+    end
+  end)
+end, 'admin')
+
+-- Simple database test
+QBCore.Commands.Add('simpledbtest', 'Simple database test (admin)', {}, true, function(source, args)
+  print("[DEBUG simpledbtest] Starting simple database test...")
+  TriggerClientEvent('chat:addMessage', source, {
+    color = {255, 255, 0},
+    args = {"[SIMPLEDBTEST]", "Starting test..."}
+  })
+  
+  -- Test 1: Simple SELECT from existing table
+  exports.oxmysql:query('SELECT COUNT(*) as count FROM bldr_drugs LIMIT 1', {}, function(rows)
+    print("[DEBUG simpledbtest] Test 1 - bldr_drugs count:", rows and rows[1] and rows[1].count or "ERROR")
+    TriggerClientEvent('chat:addMessage', source, {
+      color = {0, 255, 255},
+      args = {"[SIMPLEDBTEST]", "Test 1 passed - bldr_drugs accessible"}
+    })
+    
+    -- Test 2: Check evolution unlocks table structure
+    exports.oxmysql:query('DESCRIBE drug_evolution_unlocks', {}, function(rows2)
+      print("[DEBUG simpledbtest] Test 2 - table structure rows:", rows2 and #rows2 or "ERROR")
+      TriggerClientEvent('chat:addMessage', source, {
+        color = {0, 255, 255},
+        args = {"[SIMPLEDBTEST]", "Test 2 passed - table structure OK"}
+      })
+      
+      -- Test 3: Simple insert without ON DUPLICATE KEY
+      local testData = {
+        citizenid = "DBTEST_" .. os.time(),
+        key_name = "test_key_" .. os.time(),
+        unlocked = 1
+      }
+      
+      exports.oxmysql:insert('INSERT INTO drug_evolution_unlocks (citizenid, key_name, unlocked) VALUES (?, ?, ?)', 
+        { testData.citizenid, testData.key_name, testData.unlocked }, function(result)
+        print("[DEBUG simpledbtest] Test 3 - Insert result:", result and result.insertId or "ERROR")
+        TriggerClientEvent('chat:addMessage', source, {
+          color = {0, 255, 0},
+          args = {"[SIMPLEDBTEST]", "Test 3 passed - Insert worked! ID: " .. (result and result.insertId or "unknown")}
+        })
+      end)
+    end)
+  end)
+end, 'admin')
+
+-- Test database connection and table
+QBCore.Commands.Add('dbtest', 'Test database connection (admin)', {}, true, function(source, args)
+  print("[DEBUG dbtest] Testing database connection...")
+  
+  -- First check if table exists
+  exports.oxmysql:query('SHOW TABLES LIKE "drug_evolution_unlocks"', {}, function(rows, error)
+    if error then
+      print("[DEBUG dbtest] Error checking table existence:", error)
+      TriggerClientEvent('chat:addMessage', source, {
+        color = {255, 0, 0},
+        args = {"[DBTEST]", "Error checking table: " .. tostring(error)}
+      })
+      return
+    end
+    
+    print("[DEBUG dbtest] Table check result:", json.encode(rows))
+    if #rows == 0 then
+      print("[DEBUG dbtest] Table drug_evolution_unlocks does NOT exist!")
+      TriggerClientEvent('chat:addMessage', source, {
+        color = {255, 0, 0},
+        args = {"[DBTEST]", "Table drug_evolution_unlocks does NOT exist!"}
+      })
+      return
+    end
+    
+    TriggerClientEvent('chat:addMessage', source, {
+      color = {0, 255, 0},
+      args = {"[DBTEST]", "Table exists! Trying manual insert..."}
+    })
+    
+    -- Try a simple manual insert
+    local testCitizenId = "TEST123"
+    local testKey = "test_key"
+    
+    exports.oxmysql:insert('INSERT INTO drug_evolution_unlocks (citizenid, key_name, unlocked) VALUES (?, ?, 1)', 
+      { testCitizenId, testKey }, function(result, error)
+      if error then
+        print("[DEBUG dbtest] Manual insert error:", error)
+        TriggerClientEvent('chat:addMessage', source, {
+          color = {255, 0, 0},
+          args = {"[DBTEST]", "Insert error: " .. tostring(error)}
+        })
+      else
+        print("[DEBUG dbtest] Manual insert success:", json.encode(result))
+        TriggerClientEvent('chat:addMessage', source, {
+          color = {0, 255, 0},
+          args = {"[DBTEST]", "Insert success! insertId: " .. tostring(result.insertId)}
+        })
+      end
+    end)
+  end)
+end, 'admin')
+
+-- Direct database check command
+QBCore.Commands.Add('dbcheck', 'Check database directly (admin)', {
+  {name='playerid', help='player id'}
+}, true, function(source, args)
+  local playerId = tonumber(args[1]) or source
+  local Player = QBCore.Functions.GetPlayer(playerId)
+  if not Player then
+    TriggerClientEvent('QBCore:Notify', source, 'Player not found', 'error')
+    return
+  end
+  
+  local citizenId = Player.PlayerData.citizenid
+  
+  -- Check if drug_evolution_unlocks table exists and what's in it
+  exports.oxmysql:query('SELECT * FROM drug_evolution_unlocks WHERE citizenid = ?', { citizenId }, function(rows)
+    print("[DEBUG dbcheck] Total rows for citizenid " .. citizenId .. ": " .. #rows)
+    TriggerClientEvent('chat:addMessage', source, {
+      color = {255, 0, 255},
+      multiline = false,
+      args = {"[DBCHECK]", "Total rows: " .. #rows}
+    })
+    
+    for i, row in ipairs(rows) do
+      print(string.format("[DEBUG dbcheck] Row %d: key=%s, unlocked=%s, meta=%s", i, row.key_name, tostring(row.unlocked), tostring(row.meta)))
+      TriggerClientEvent('chat:addMessage', source, {
+        color = {255, 0, 255},
+        multiline = false,
+        args = {"[DBCHECK]", string.format("Row %d: %s = %s", i, row.key_name, row.unlocked == 1 and "UNLOCKED" or "LOCKED")}
+      })
+    end
+  end)
+end, 'admin')
+
 -- Initialization
 Citizen.CreateThread(function()
   ensureTables()
@@ -668,3 +1005,486 @@ Citizen.CreateThread(function()
   end
 end)
 
+
+-- === BLDR-DRUGS Evolution (Progression) ===
+
+local function evoNotify(src, msg, typ)
+  typ = typ or 'success'
+  local brand = (Config.Evolution and Config.Evolution.brand) and (Config.Evolution.brand .. ': ') or ''
+  if Config.Evolution and Config.Evolution.notify == 'ox' and GetResourceState('ox_lib') == 'started' then
+    -- Use ox_lib with enhanced styling for better visibility
+    local notifyData = {
+      title = brand:gsub(': $', ''), -- Remove trailing colon for title
+      description = msg,
+      type = typ,
+      position = 'top-right',
+      style = {
+        backgroundColor = 'rgba(0, 0, 0, 0.9)',
+        color = '#ffffff',
+        border = '1px solid #00ff88'
+      }
+    }
+    TriggerClientEvent('ox_lib:notify', src, notifyData)
+  elseif Config.Evolution and Config.Evolution.notify == 'qb' then
+    TriggerClientEvent('QBCore:Notify', src, brand .. msg, typ)
+  else
+    TriggerClientEvent('chat:addMessage', src, { args = {'System', brand .. msg} })
+  end
+end
+
+local function evoEnsureRow(citizenid)
+  exports.oxmysql:insert('INSERT IGNORE INTO drug_evolution_progress (citizenid, total_revenue) VALUES (?, 0)', { citizenid })
+end
+
+local function evoAddRevenue(citizenid, delta)
+  evoEnsureRow(citizenid)
+  exports.oxmysql:update('UPDATE drug_evolution_progress SET total_revenue = total_revenue + ? WHERE citizenid = ?', { delta, citizenid })
+end
+
+local function evoGetRevenue(citizenid, cb)
+  exports.oxmysql:single('SELECT total_revenue FROM drug_evolution_progress WHERE citizenid = ?', { citizenid }, function(row)
+    cb(row and (row.total_revenue or 0) or 0)
+  end)
+end
+
+local function evoSetUnlocked(citizenid, key)
+  exports.oxmysql:insert([[
+    INSERT INTO drug_evolution_unlocks (citizenid, key_name, unlocked, meta)
+    VALUES (?, ?, 1, NULL)
+    ON DUPLICATE KEY UPDATE unlocked = 1
+  ]], { citizenid, key })
+end
+
+local function evoIsUnlocked(citizenid, key, cb)
+  exports.oxmysql:single('SELECT unlocked FROM drug_evolution_unlocks WHERE citizenid = ? AND key_name = ?', { citizenid, key }, function(row)
+    -- Handle both boolean true and integer 1
+    local isUnlocked = row and (row.unlocked == 1 or row.unlocked == true)
+    cb(isUnlocked)
+  end)
+end
+
+local function evoAddCount(citizenid, item, delta)
+  exports.oxmysql:single('SELECT meta FROM drug_evolution_unlocks WHERE citizenid = ? AND key_name = ?', { citizenid, 'count_'..item }, function(row)
+    local count = 0
+    if row and row.meta then
+      local ok, data = pcall(json.decode, row.meta)
+      if ok and data and data.count then count = tonumber(data.count) or 0 end
+    end
+    count = count + (tonumber(delta) or 0)
+    local meta = json.encode({ count = count })
+    exports.oxmysql:insert([[
+      INSERT INTO drug_evolution_unlocks (citizenid, key_name, unlocked, meta)
+      VALUES (?, ?, 0, ?)
+      ON DUPLICATE KEY UPDATE meta = VALUES(meta)
+    ]], { citizenid, 'count_'..item, meta })
+  end)
+end
+
+-- Try unlocks when progress changes
+local function evoTryUnlocks(src, citizenid, lastSale)
+  if not (Config.Evolution and Config.Evolution.enabled) then return end
+  print("[DEBUG evoTryUnlocks] Starting for citizenid:", citizenid, "item:", lastSale and lastSale.item, "amount:", lastSale and lastSale.amount)
+  
+  evoGetRevenue(citizenid, function(totalRevenue)
+    print("[DEBUG evoTryUnlocks] Total revenue:", totalRevenue)
+    local newly = 0
+    local nearUnlocks = {}
+    local notifySettings = Config.Evolution.notifications or {}
+    print("[DEBUG evoTryUnlocks] Notifications enabled:", notifySettings.enabled)
+    
+    for _, th in ipairs(Config.Evolution.thresholds or {}) do
+      print("[DEBUG evoTryUnlocks] Checking threshold:", th.key, "by:", th.by, "item:", th.item, "amount:", th.amount)
+      exports.oxmysql:single('SELECT unlocked FROM drug_evolution_unlocks WHERE citizenid = ? AND key_name = ?', { citizenid, th.key }, function(row)
+        local already = row and (row.unlocked == 1 or row.unlocked == true)
+        print("[DEBUG evoTryUnlocks] Threshold", th.key, "already unlocked:", already)
+        if not already then
+          local met = false
+          local progress = 0
+          
+          if th.by == 'revenue' then
+            met = totalRevenue >= (th.amount or 0)
+            progress = (totalRevenue / (th.amount or 1)) * 100
+            
+            -- Check for progress notifications based on config
+            if not met and notifySettings.enabled then
+              local milestones = notifySettings.milestones or {75, 90, 95}
+              local nearThreshold = notifySettings.nearUnlockThreshold or 95
+              
+              if progress >= nearThreshold then
+                table.insert(nearUnlocks, {
+                  key = th.key,
+                  progress = progress,
+                  remaining = (th.amount or 0) - totalRevenue,
+                  type = 'revenue'
+                })
+              else
+                -- Check other milestones
+                for _, milestone in ipairs(milestones) do
+                  if milestone < nearThreshold and progress >= milestone and progress < milestone + 5 then
+                    local remaining = (th.amount or 0) - totalRevenue
+                    evoNotify(src, string.format('Evolution Progress: %s is %d%% complete! $%d more revenue needed.', th.key, milestone, remaining), 'primary')
+                    break
+                  end
+                end
+              end
+            end
+            
+          elseif th.by == 'count' and th.item then
+            print("[DEBUG evoTryUnlocks] Count-based check for", th.item)
+            exports.oxmysql:single('SELECT meta FROM drug_evolution_unlocks WHERE citizenid = ? AND key_name = ?', { citizenid, 'count_'..th.item }, function(r2)
+              local cnt = 0
+              if r2 and r2.meta then
+                local ok, data = pcall(json.decode, r2.meta)
+                if ok and data and data.count then cnt = tonumber(data.count) or 0 end
+              end
+              print("[DEBUG evoTryUnlocks] Current", th.item, "count:", cnt, "required:", th.amount)
+              
+              progress = (cnt / (th.amount or 1)) * 100
+              print("[DEBUG evoTryUnlocks] Progress:", progress .. "%")
+              
+              if cnt >= (th.amount or 0) then
+                print("[DEBUG evoTryUnlocks] UNLOCKING", th.key)
+                -- unlock
+                evoSetUnlocked(citizenid, th.key)
+                for _, rkey in ipairs(th.unlocks or {}) do evoSetUnlocked(citizenid, rkey) end
+                newly = newly + 1
+                evoNotify(src, string.format('🎉 Evolution unlocked! You can now craft %s!', th.key), 'success')
+              else
+                -- Check for progress notifications based on config
+                if notifySettings.enabled then
+                  print("[DEBUG evoTryUnlocks] Checking notifications for progress:", progress)
+                  local milestones = notifySettings.milestones or {75, 90, 95}
+                  local nearThreshold = notifySettings.nearUnlockThreshold or 95
+                  
+                  if progress >= nearThreshold then
+                    local remaining = (th.amount or 0) - cnt
+                    table.insert(nearUnlocks, {
+                      key = th.key,
+                      progress = progress,
+                      remaining = remaining,
+                      type = 'count',
+                      item = th.item
+                    })
+                  else
+                    -- Check other milestones
+                    for _, milestone in ipairs(milestones) do
+                      if milestone <= progress and progress < milestone + 10 then  -- Wider range for testing
+                        local remaining = (th.amount or 0) - cnt
+                        print("[DEBUG evoTryUnlocks] Sending milestone notification:", milestone, "% for", th.key)
+                        evoNotify(src, string.format('🔥 Evolution Progress: %s is %d%% complete! %d more %s sales needed.', th.key, math.floor(progress), remaining, th.item), 'info')
+                        break
+                      end
+                    end
+                  end
+                end
+              end
+            end)
+            return -- async path returns here
+          end
+          
+          if met then
+            evoSetUnlocked(citizenid, th.key)
+            for _, rkey in ipairs(th.unlocks or {}) do evoSetUnlocked(citizenid, rkey) end
+            newly = newly + 1
+          end
+        end
+      end)
+    end
+    
+    -- Handle near-unlock notifications for revenue-based unlocks
+    if notifySettings.enabled then
+      for _, unlock in ipairs(nearUnlocks) do
+        if unlock.type == 'revenue' then
+          evoNotify(src, string.format('🔥 ALMOST THERE! %s is %.1f%% complete! Only $%d more revenue needed!', unlock.key, unlock.progress, unlock.remaining), 'warning')
+        elseif unlock.type == 'count' then
+          evoNotify(src, string.format('🔥 ALMOST THERE! %s is %.1f%% complete! Only %d more %s sales needed!', unlock.key, unlock.progress, unlock.remaining, unlock.item), 'warning')
+        end
+      end
+    end
+    
+    if newly > 0 then
+      local commandText = (Config.Evolution.notifications and Config.Evolution.notifications.showProgressCommand) and ' Check progress with /checkevolution' or ''
+      evoNotify(src, ('🎉 Unlocked %d evolution tier(s)! New recipes available!%s'):format(newly, commandText), 'success')
+      for _, grant in ipairs((Config.Evolution.autoGrantItems or {})) do
+        local count = grant.count or 1
+        if GetResourceState('ox_inventory') == 'started' then
+          exports.ox_inventory:AddItem(src, grant.item, count)
+        else
+          local Player = QBCore.Functions.GetPlayer(src)
+          if Player then Player.Functions.AddItem(grant.item, count) end
+        end
+      end
+    end
+  end)
+end
+
+-- Public: record a sale into evolution
+function BLDR_Evolution.RecordSale(src, citizenid, itemSold, amountSold, grossRevenue)
+  if not (Config.Evolution and Config.Evolution.enabled) then return end
+  if not citizenid then
+    local Player = QBCore.Functions.GetPlayer(src)
+    citizenid = Player and Player.PlayerData.citizenid
+  end
+  if not citizenid then return end
+  evoAddRevenue(citizenid, tonumber(grossRevenue or 0))
+  if itemSold and amountSold then evoAddCount(citizenid, itemSold, tonumber(amountSold or 0)) end
+  evoTryUnlocks(src, citizenid, { item=itemSold, amount=amountSold, revenue=grossRevenue })
+end
+
+-- Check if a recipe is unlocked (sync via callback)
+QBCore.Functions.CreateCallback('bldr-drugs:isUnlocked', function(src, cb, recipe_key)
+  local Player = QBCore.Functions.GetPlayer(src); if not Player then cb(false) return end
+  evoIsUnlocked(Player.PlayerData.citizenid, recipe_key, cb)
+end)
+
+-- Get available recipes for crafting menu
+QBCore.Functions.CreateCallback('bldr-drugs:getAvailableRecipes', function(src, cb)
+  local Player = QBCore.Functions.GetPlayer(src)
+  if not Player then cb({}) return end
+  if not (Config.Evolution and Config.Evolution.enabled) then cb({}) return end
+  
+  local citizenId = Player.PlayerData.citizenid
+  local availableRecipes = {}
+  local recipeCount = 0
+  local totalRecipes = 0
+  
+  -- Count total recipes
+  for _, _ in pairs(Config.Evolution.recipes or {}) do
+    totalRecipes = totalRecipes + 1
+  end
+  
+  if totalRecipes == 0 then
+    cb({})
+    return
+  end
+  
+  -- Check each recipe
+  for recipeKey, recipe in pairs(Config.Evolution.recipes or {}) do
+    evoIsUnlocked(citizenId, recipe.unlock_key, function(unlocked)
+      recipeCount = recipeCount + 1
+      
+      if unlocked then
+        table.insert(availableRecipes, {
+          key = recipeKey,
+          label = recipe.label,
+          requires = recipe.requires,
+          result = recipe.result,
+          time_ms = recipe.time_ms
+        })
+      end
+      
+      -- Return results when all recipes have been checked
+      if recipeCount >= totalRecipes then
+        cb(availableRecipes)
+      end
+    end)
+  end
+end)
+
+-- Craft evolution recipes
+RegisterNetEvent('bldr-drugs:craftEvolution', function(recipe_key)
+  local src = source
+  if not (Config.Evolution and Config.Evolution.enabled) then return end
+  local rec = Config.Evolution.recipes and Config.Evolution.recipes[recipe_key]
+  if not rec then return end
+  local Player = QBCore.Functions.GetPlayer(src); if not Player then return end
+  evoIsUnlocked(Player.PlayerData.citizenid, rec.unlock_key, function(ok)
+    if not ok then evoNotify(src, 'You have not unlocked this recipe yet.', 'error'); return end
+
+    -- Inventory wrappers
+    local function hasItem(item, count)
+      if GetResourceState('ox_inventory') == 'started' then
+        return (exports.ox_inventory:Search(src, 'count', item) or 0) >= count
+      else
+        local it = Player.Functions.GetItemByName(item)
+        return it and (it.amount or 0) >= count
+      end
+    end
+    local function removeItem(item, count)
+      if GetResourceState('ox_inventory') == 'started' then
+        return exports.ox_inventory:RemoveItem(src, item, count)
+      else
+        return Player.Functions.RemoveItem(item, count)
+      end
+    end
+    local function addItem(item, count)
+      if GetResourceState('ox_inventory') == 'started' then
+        return exports.ox_inventory:AddItem(src, item, count)
+      else
+        return Player.Functions.AddItem(item, count)
+      end
+    end
+
+    -- Requirements
+    for _, req in ipairs(rec.requires or {}) do
+      if not hasItem(req.item, req.count or 1) then
+        evoNotify(src, ('Missing %sx %s'):format(req.count or 1, req.item), 'error'); return
+      end
+    end
+    for _, req in ipairs(rec.requires or {}) do removeItem(req.item, req.count or 1) end
+    addItem(rec.result.item, rec.result.count or 1)
+    evoNotify(src, ('Crafted %s!'):format(rec.label or recipe_key), 'success')
+  end)
+end)
+
+-- New command to check evolution progress and unlock status
+QBCore.Commands.Add('checkevolution', 'Check evolution progress towards unlocking evolved drugs', {{name='id', help='player id (optional)'}}, false, function(source, args)
+  local target = tonumber(args[1]) or source
+  local Player = QBCore.Functions.GetPlayer(target)
+  if not Player then 
+    evoNotify(source, 'Player not found', 'error')
+    return 
+  end
+  
+  local cid = Player.PlayerData.citizenid
+  local isAdmin = QBCore.Functions.HasPermission(source, 'admin')
+  
+  -- Only allow checking own stats unless admin
+  if target ~= source and not isAdmin then
+    evoNotify(source, 'You can only check your own evolution progress', 'error')
+    return
+  end
+  
+  if not (Config.Evolution and Config.Evolution.enabled) then
+    evoNotify(source, 'Evolution system is disabled', 'error')
+    return
+  end
+  
+  -- Check if command is available to non-admins
+  local allowCommand = (Config.Evolution.notifications and Config.Evolution.notifications.showProgressCommand) or isAdmin
+  if not allowCommand then
+    evoNotify(source, 'Evolution progress command is disabled', 'error')
+    return
+  end
+  
+  evoGetRevenue(cid, function(totalRevenue)
+    -- Show header notification
+    evoNotify(source, string.format('💰 Evolution Progress - Total Revenue: $%d', totalRevenue), 'primary')
+    
+    local hasUnlocks = false
+    local unlockCount = 0
+    local totalUnlocks = #(Config.Evolution.thresholds or {})
+    
+    for _, th in ipairs(Config.Evolution.thresholds or {}) do
+      exports.oxmysql:single('SELECT unlocked FROM drug_evolution_unlocks WHERE citizenid = ? AND key_name = ?', { cid, th.key }, function(row)
+        local isUnlocked = row and row.unlocked == 1
+        unlockCount = unlockCount + 1
+        
+        if th.by == 'revenue' then
+          local progress = math.min(100, (totalRevenue / (th.amount or 1)) * 100)
+          if isUnlocked then
+            evoNotify(source, string.format('✅ %s: UNLOCKED', th.key), 'success')
+          else
+            local remaining = (th.amount or 0) - totalRevenue
+            evoNotify(source, string.format('⏳ %s: %.1f%% ($%d needed)', th.key, progress, remaining), 'primary')
+          end
+          hasUnlocks = true
+          
+        elseif th.by == 'count' and th.item then
+          exports.oxmysql:single('SELECT meta FROM drug_evolution_unlocks WHERE citizenid = ? AND key_name = ?', { cid, 'count_'..th.item }, function(r2)
+            local cnt = 0
+            if r2 and r2.meta then
+              local ok, data = pcall(json.decode, r2.meta)
+              if ok and data and data.count then cnt = tonumber(data.count) or 0 end
+            end
+            
+            local progress = math.min(100, (cnt / (th.amount or 1)) * 100)
+            if isUnlocked then
+              evoNotify(source, string.format('✅ %s: UNLOCKED', th.key), 'success')
+            else
+              local remaining = (th.amount or 0) - cnt
+              evoNotify(source, string.format('⏳ %s: %.1f%% (%d %s needed)', th.key, progress, remaining, th.item), 'primary')
+            end
+          end)
+          hasUnlocks = true
+        end
+        
+        -- Show summary notification when all unlocks have been processed
+        if unlockCount >= totalUnlocks then
+          if not hasUnlocks then
+            evoNotify(source, 'No evolution thresholds configured', 'error')
+          else
+            evoNotify(source, '📋 Evolution progress check complete!', 'success')
+          end
+        end
+      end)
+    end
+    
+    -- Handle case where no thresholds exist
+    if totalUnlocks == 0 then
+      evoNotify(source, 'No evolution thresholds configured', 'error')
+    end
+  end)
+end)
+
+-- Clear evolution data for testing
+QBCore.Commands.Add('clearevodata', 'Clear evolution data for testing (admin)', {
+  {name='playerid', help='player id'}, 
+  {name='item', help='item to clear (weed/cocaine/meth) or "all"'}
+}, true, function(source, args)
+  local playerId = tonumber(args[1]) or source
+  local itemToClear = args[2] or 'all'
+  
+  local Player = QBCore.Functions.GetPlayer(playerId)
+  if not Player then
+    TriggerClientEvent('QBCore:Notify', source, 'Player not found', 'error')
+    return
+  end
+  
+  local citizenId = Player.PlayerData.citizenid
+  
+  if itemToClear == 'all' then
+    -- Clear all evolution data
+    exports.oxmysql:execute('DELETE FROM drug_evolution_progress WHERE citizenid = ?', { citizenId })
+    exports.oxmysql:execute('DELETE FROM drug_evolution_unlocks WHERE citizenid = ?', { citizenId })
+    TriggerClientEvent('QBCore:Notify', source, string.format('Cleared ALL evolution data for %s', Player.PlayerData.charinfo.firstname), 'success')
+  else
+    -- Clear specific item data
+    local keysToDelete = {}
+    if itemToClear == 'meth' then
+      keysToDelete = {'count_meth', 'evo_meth_lvl1', 'recipe_evo_meth_lvl1'}
+    elseif itemToClear == 'weed' then
+      keysToDelete = {'count_weed', 'evo_weed_lvl1', 'recipe_evo_weed_lvl1'}
+    elseif itemToClear == 'cocaine' then
+      keysToDelete = {'count_cocaine', 'evo_cocaine_lvl1', 'recipe_evo_cocaine_lvl1'}
+    else
+      TriggerClientEvent('QBCore:Notify', source, 'Invalid item. Use: weed, cocaine, meth, or all', 'error')
+      return
+    end
+    
+    -- Delete specific unlock entries
+    for _, key in ipairs(keysToDelete) do
+      exports.oxmysql:execute('DELETE FROM drug_evolution_unlocks WHERE citizenid = ? AND key_name = ?', { citizenId, key })
+    end
+    
+    TriggerClientEvent('QBCore:Notify', source, string.format('Cleared %s evolution data for %s', itemToClear, Player.PlayerData.charinfo.firstname), 'success')
+  end
+end, 'admin')
+
+-- Manual unlock command for testing (placed after evolution functions are defined)
+QBCore.Commands.Add('forceunlock', 'Force unlock evolution recipe (admin)', {
+  {name='playerid', help='player id'}, 
+  {name='recipe_key', help='recipe key to unlock'}
+}, true, function(source, args)
+  local playerId = tonumber(args[1])
+  local recipeKey = args[2]
+  
+  if not playerId or not recipeKey then
+    TriggerClientEvent('QBCore:Notify', source, 'Usage: /forceunlock [playerid] [recipe_key]', 'error')
+    return
+  end
+  
+  local Player = QBCore.Functions.GetPlayer(playerId)
+  if not Player then
+    TriggerClientEvent('QBCore:Notify', source, 'Player not found', 'error')
+    return
+  end
+  
+  local citizenId = Player.PlayerData.citizenid
+  
+  -- Force unlock the recipe
+  evoSetUnlocked(citizenId, recipeKey)
+  
+  TriggerClientEvent('QBCore:Notify', source, string.format('Force unlocked %s for %s', recipeKey, Player.PlayerData.charinfo.firstname), 'success')
+  TriggerClientEvent('QBCore:Notify', playerId, string.format('Recipe unlocked: %s', recipeKey), 'success')
+end, 'admin')
