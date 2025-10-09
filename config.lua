@@ -5,7 +5,7 @@ Config.ResourceName = 'bldr-drugs'
 
 -- Debug settings
 Config.Debug = {
-  enabled = false,         -- Master debug toggle - set to false to disable ALL debug output
+  enabled = true,          -- Master debug toggle - set to true to enable debug output
   showNPCs = true,        -- Show NPC debug info
   showSales = true,       -- Show sale transactions
   showSpawning = true,    -- Show NPC spawning/despawning
@@ -178,6 +178,43 @@ Config.Items = {
     successChance = 0.90,
     policePenalty = 0.06,
     description = 'Party pills for the night'
+  },
+
+  -- EVOLVED DRUGS (Higher tier, better prices)
+  ['evo_weed_chronic'] = {
+    label = 'Chronic Kush',
+    basePrice = 85,           -- 70% more than regular weed
+    priceVariation = 0.15,    -- Less variation (premium product)
+    xpPerUnit = 8,            -- 60% more XP
+    minLevel = 1,             -- Requires some experience
+    maxAmount = 40,
+    successChance = 0.96,     -- Higher success rate
+    policePenalty = 0.04,     -- Less police attention
+    description = 'Premium evolved cannabis strain'
+  },
+
+  ['evo_cocaine_pure'] = {
+    label = 'Pure Colombian',
+    basePrice = 200,          -- 67% more than regular cocaine
+    priceVariation = 0.2,
+    xpPerUnit = 12,           -- 50% more XP
+    minLevel = 3,             -- Higher level requirement
+    maxAmount = 20,
+    successChance = 0.88,     -- Slightly better success
+    policePenalty = 0.07,     -- Slightly less police penalty
+    description = 'Pharmaceutical grade cocaine'
+  },
+
+  ['evo_meth_l1'] = {
+    label = 'Blue Crystal',
+    basePrice = 300,          -- 67% more than regular meth
+    priceVariation = 0.2,
+    xpPerUnit = 15,           -- 50% more XP
+    minLevel = 4,             -- High level requirement
+    maxAmount = 15,
+    successChance = 0.83,     -- Better success rate
+    policePenalty = 0.08,     -- Slightly less police attention
+    description = 'Laboratory grade methamphetamine'
   }
 }
 
@@ -229,4 +266,73 @@ Config.ThirdEye = {
   },
   targetModels = {},           -- add model hashes if using object targeting
   blacklistedZones = {}        -- add zone names if needed
+}
+
+-- === BLDR-DRUGS: Evolution (progression) ===
+Config.Evolution = {
+  enabled = true,
+  brand = 'BLDR-DRUGS',         -- prefix for player-facing toasts
+  notify = 'ox',                -- 'qb' | 'ox' | 'chat' (ox_lib has better styling)
+  inventory = 'auto',           -- 'auto' | 'ox' | 'qb' | 'core'
+  
+  -- Progress notification settings
+  notifications = {
+    enabled = true,             -- Enable progress notifications
+    milestones = {75, 90, 95},  -- Notify at these progress percentages
+    nearUnlockThreshold = 95,   -- Show special "almost there" message at this %
+    showProgressCommand = true  -- Allow /checkevolution command for all players
+  },
+  
+  thresholds = {
+    -- Unlocks by count sold of specific items (simplified for testing)
+    { key = 'evo_weed_lvl1',    by = 'count', item = 'weed',    amount = 25, unlocks = {'recipe_evo_weed_lvl1'} },
+    { key = 'evo_cocaine_lvl1', by = 'count', item = 'cocaine', amount = 20, unlocks = {'recipe_evo_cocaine_lvl1'} },
+    { key = 'evo_meth_lvl1',    by = 'count', item = 'meth',    amount = 15, unlocks = {'recipe_evo_meth_lvl1'} },
+  },
+  autoGrantItems = {
+    -- Auto-give crafting materials when unlocks happen (optional)
+    -- { item = 'thc_extract', count = 1 },
+    -- { item = 'purification_kit', count = 1 },
+    -- { item = 'lithium', count = 1 }
+  },
+  recipes = {
+    -- Evolved Weed Recipe (25 weed sales required)
+    recipe_evo_weed_lvl1 = {
+      label = 'Chronic Weed',
+      result = { item = 'evo_weed_chronic', count = 2 },
+      requires = {
+        { item = 'weed', count = 3 },
+        { item = 'thc_extract', count = 1 },
+        { item = 'rolling_papers', count = 1 },
+      },
+      unlock_key = 'recipe_evo_weed_lvl1',
+      time_ms = 5000
+    },
+    
+    -- Evolved Cocaine Recipe (20 cocaine sales required)
+    recipe_evo_cocaine_lvl1 = {
+      label = 'Pure Cocaine',
+      result = { item = 'evo_cocaine_pure', count = 1 },
+      requires = {
+        { item = 'cocaine', count = 2 },
+        { item = 'purification_kit', count = 1 },
+        { item = 'acetone', count = 1 },
+      },
+      unlock_key = 'recipe_evo_cocaine_lvl1',
+      time_ms = 7000
+    },
+    
+    -- Evolved Meth Recipe (15 meth sales required)
+    recipe_evo_meth_lvl1 = {
+      label = 'Blue Meth',
+      result = { item = 'evo_meth_l1', count = 1 },
+      requires = {
+        { item = 'meth', count = 2 },
+        { item = 'lithium', count = 1 },
+        { item = 'pseudoephedrine', count = 1 },
+      },
+      unlock_key = 'recipe_evo_meth_lvl1',
+      time_ms = 8000
+    }
+  }
 }
