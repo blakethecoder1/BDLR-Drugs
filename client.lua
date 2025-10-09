@@ -14,24 +14,43 @@ local npcCooldowns = {} -- Track NPCs we've recently dealt with: {entityId: expi
 
 -- Custom notification function with improved visibility
 local function CustomNotify(text, type, duration)
-  if Config.Notifications.useCustom then
-    -- Use improved notification system with better colors
-    local notifyType = type or 'info'
-    local notifyDuration = duration or Config.Notifications.duration
+  local notifyType = type or 'info'
+  local notifyDuration = duration or 4000
+  
+  -- Convert type to ensure compatibility
+  if notifyType == 'primary' then notifyType = 'info' end
+  
+  -- Use ox_lib notifications for better styling if available
+  if GetResourceState('ox_lib') == 'started' then
+    local notifyData = {
+      title = 'BLDR-DRUGS',
+      description = text,
+      type = notifyType,
+      position = 'top-right',
+      duration = notifyDuration,
+      style = {
+        backgroundColor = 'rgba(0, 0, 0, 0.95)',
+        color = '#ffffff',
+        border = '2px solid #00ff88'
+      }
+    }
     
-    -- Convert type to ensure compatibility
-    if notifyType == 'primary' then notifyType = 'info' end
-    
-    -- Use exports to send a custom styled notification
-    if exports['qb-core'] and exports['qb-core'].Notify then
-      exports['qb-core']:Notify(text, notifyType, notifyDuration)
-    else
-      -- Fallback to TriggerEvent if exports don't work
-      TriggerEvent('QBCore:Notify', text, notifyType, notifyDuration)
+    -- Adjust colors based on type
+    if notifyType == 'error' then
+      notifyData.style.border = '2px solid #ff4444'
+      notifyData.style.color = '#ff4444'
+    elseif notifyType == 'success' then
+      notifyData.style.border = '2px solid #00ff88'
+      notifyData.style.color = '#00ff88'
+    elseif notifyType == 'warning' then
+      notifyData.style.border = '2px solid #ffaa00'
+      notifyData.style.color = '#ffaa00'
     end
+    
+    exports.ox_lib:notify(notifyData)
   else
-    -- Use default QBCore notification
-    QBCore.Functions.Notify(text, type, duration)
+    -- Fallback to QBCore notification
+    QBCore.Functions.Notify(text, notifyType, notifyDuration)
   end
 end
 
@@ -1044,6 +1063,9 @@ AddEventHandler('onResourceStop', function(resName)
   -- Remove third-eye targets
   RemoveThirdEyeTargets()
   
+  -- Remove crafting table targets
+  RemoveCraftingTables()
+  
   -- Cleanup NPCs
   for _, npcData in pairs(activeNPCs) do
     if DoesEntityExist(npcData.entity) then
@@ -1053,4 +1075,147 @@ AddEventHandler('onResourceStop', function(resName)
   
   activeNPCs = {}
   debugPrint("Cleaned up all NPCs and targets on resource stop")
+end)
+
+-- === EVOLUTION CRAFTING TABLE SYSTEM ===
+
+-- Crafting table locations (you can add more)
+local craftingTables = {
+  {
+    coords = vector3(1375.8, 3602.01, 34.88), -- Updated location
+    label = "Drug Lab Table",
+    prop = "bkr_prop_meth_table01a" -- Optional prop to spawn
+  }
+  -- Add more locations here:
+  -- { coords = vector3(x, y, z), label = "Another Lab", prop = "prop_name" }
+}
+
+-- Initialize crafting tables
+Citizen.CreateThread(function()
+  if not Config.Evolution or not Config.Evolution.enabled then return end
+  
+  for i, table in ipairs(craftingTables) do
+    -- Optionally spawn a prop
+    if table.prop then
+      local prop = CreateObject(GetHashKey(table.prop), table.coords.x, table.coords.y, table.coords.z - 1.0, false, false, false)
+      SetEntityHeading(prop, 0.0)
+      FreezeEntityPosition(prop, true)
+      debugPrint("Spawned crafting table prop at", table.coords)
+    end
+    
+    -- Add qb-target interaction
+    if Config.ThirdEye.enabled and Config.ThirdEye.useQBTarget then
+      exports['qb-target']:AddBoxZone("crafting_table_" .. i, table.coords, 2.0, 2.0, {
+        name = "crafting_table_" .. i,
+        heading = 0,
+        minZ = table.coords.z - 1,
+        maxZ = table.coords.z + 1,
+      }, {
+        options = {
+          {
+            type = "client",
+            event = "bldr-drugs:openCraftingMenu",
+            icon = "fas fa-flask",
+            label = table.label,
+          }
+        },
+        distance = 2.0
+      })
+      debugPrint("Added crafting table target zone", i)
+    end
+  end
+end)
+
+-- Remove crafting table targets
+function RemoveCraftingTables()
+  if not Config.ThirdEye.enabled or not Config.ThirdEye.useQBTarget then return end
+  
+  for i, _ in ipairs(craftingTables) do
+    exports['qb-target']:RemoveZone("crafting_table_" .. i)
+  end
+  debugPrint("Removed all crafting table targets")
+end
+
+-- Open crafting menu event
+RegisterNetEvent('bldr-drugs:openCraftingMenu', function()
+  if not Config.Evolution or not Config.Evolution.enabled then 
+    CustomNotify("Evolution system is disabled", "error")
+    return 
+  end
+  
+  -- Get available recipes
+  QBCore.Functions.TriggerCallback('bldr-drugs:getAvailableRecipes', function(recipes)
+    if not recipes or #recipes == 0 then
+      CustomNotify("No recipes available. Sell more drugs to unlock recipes!", "error")
+      return
+    end
+    
+    -- Create menu options
+    local menuOptions = {}
+    for _, recipe in ipairs(recipes) do
+      local requirementText = ""
+      for i, req in ipairs(recipe.requires or {}) do
+        if i > 1 then requirementText = requirementText .. ", " end
+        requirementText = requirementText .. (req.count or 1) .. "x " .. req.item
+      end
+      
+      table.insert(menuOptions, {
+        header = recipe.label,
+        txt = "Requires: " .. requirementText .. "<br/>Crafting time: " .. ((recipe.time_ms or 5000) / 1000) .. " seconds",
+        params = {
+          event = "bldr-drugs:startCrafting",
+          args = {
+            recipeKey = recipe.key
+          }
+        }
+      })
+    end
+    
+    -- Add close option
+    table.insert(menuOptions, {
+      header = "Close",
+      txt = "",
+      params = {
+        event = "qb-menu:closeMenu"
+      }
+    })
+    
+    -- Open menu
+    exports['qb-menu']:openMenu(menuOptions)
+  end)
+end)
+
+-- Start crafting event
+RegisterNetEvent('bldr-drugs:startCrafting', function(data)
+  local recipeKey = data.recipeKey
+  if not recipeKey then return end
+  
+  -- Get recipe details for progress bar
+  local recipe = Config.Evolution.recipes[recipeKey]
+  if not recipe then return end
+  
+  -- Close menu
+  exports['qb-menu']:closeMenu()
+  
+  -- Show progress bar
+  QBCore.Functions.Progressbar("drug_crafting", "Crafting " .. (recipe.label or "evolved drug") .. "...", recipe.time_ms or 5000, false, true, {
+    disableMovement = true,
+    disableCarMovement = true,
+    disableMouse = false,
+    disableCombat = true,
+  }, {
+    animDict = "mini@repair",
+    anim = "fixing_a_ped",
+    flags = 49,
+  }, {}, {}, function() -- Done
+    -- Trigger server-side crafting
+    TriggerServerEvent('bldr-drugs:craftEvolution', recipeKey)
+  end, function() -- Cancel
+    CustomNotify("Crafting cancelled", "error")
+  end)
+end)
+
+-- Client event to trigger crafting (for admin testing)
+RegisterNetEvent('bldr-drugs:triggerCraft', function(recipeKey)
+  TriggerServerEvent('bldr-drugs:craftEvolution', recipeKey)
 end)
