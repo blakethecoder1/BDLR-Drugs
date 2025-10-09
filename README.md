@@ -1,14 +1,48 @@
-# 🌿 BLDR-Drugs v2.6 - Advanced Drug Dealing System
+# 🌿 BLDR-Drugs v2.7 - Advanced Drug Dealing System
 **Next-Generation Drug Dealing for QBCore FiveM Servers**
 
 ![FiveM](https://img.shields.io/badge/FiveM-QBCore-green)
 ![License](https://img.shields.io/badge/License-MIT-blue)
-![Version](https://img.shields.io/badge/Version-2.6-brightgreen)
+![Version](https://img.shields.io/badge/Version-2.7-brightgreen)
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-success)
 
 ---
 
-## 🚀 **What Makes This Amazing**
+## � **Changelog - v2.7 Evolution Update**
+
+### 🆕 **Major Features Added**
+- **Drug Evolution System**: Unlock premium drug variants through dedicated dealing
+- **Progress Tracking**: Real-time notifications for evolution milestones (25%, 50%, 75%, 90%, 95%)
+- **Evolved Drug Selling**: Premium variants sellable with 67-70% price increases
+- **Enhanced Notifications**: Improved visibility with ox_lib integration and custom styling
+- **Admin Evolution Tools**: Comprehensive commands for testing and management
+
+### 🔧 **Technical Improvements**
+- **Database Integration**: New tables for persistent evolution progress tracking
+- **Crafting Table System**: Interactive evolution crafting with qb-target integration
+- **Enhanced CustomNotify**: Better notification styling with dark backgrounds and ox_lib priority
+- **Debug Logging**: Extensive debug system for evolution tracking and troubleshooting
+- **Function Reorganization**: Improved code structure and error handling
+
+### 🎨 **UI/UX Enhancements**
+- **Better Notification Visibility**: Dark backgrounds with improved text contrast
+- **ox_lib Integration**: Enhanced notification system with better styling and positioning
+- **Preserved UI Themes**: Maintained existing dark theme while improving readability
+- **Responsive Design**: Consistent experience across all notification types
+
+### 🗃️ **Database Changes**
+- **New Tables**: `drug_evolution_progress` and `drug_evolution_unlocks`
+- **Persistent Progress**: Evolution data survives server restarts
+- **Optimized Queries**: Efficient database operations for real-time tracking
+
+### ⚙️ **Configuration Updates**
+- **Evolution Thresholds**: Configurable sales requirements (15 meth, 20 cocaine, 25 weed)
+- **Evolved Drug Pricing**: Premium pricing configuration with significant value increases
+- **Notification Settings**: Customizable milestone notifications and styling options
+
+---
+
+## �🚀 **What Makes This Amazing**
 
 ### 🎯 **Dual Interaction System**
 - **Traditional NPC Approach**: Walk up to randomly spawning NPCs for classic drug dealing
@@ -24,6 +58,14 @@
 - **Vehicle Protection**: Blocks selling to NPCs sitting in cars
 - **Mission NPC Protection**: Safeguards story-important characters
 - **Admin Tools**: `/checknpc` command to identify and add NPCs to blacklist
+
+### 🧬 **Drug Evolution System** (NEW in v2.7)
+- **Progressive Unlocks**: Sell drugs to unlock evolved recipes with better profits
+- **Smart Progress Tracking**: Automatic notifications at 75%, 90%, 95% completion
+- **Physical Crafting Tables**: Third-eye integration with dedicated crafting stations
+- **Persistent Progress**: All evolution progress saved across server restarts
+- **Admin Management**: Complete tools for monitoring and managing player progression
+- **Configurable Thresholds**: Customize sales requirements for each drug type
 
 ### � **Enhanced NPC Interactions**
 - **Smart Looking System**: NPCs stop and face you when selling
@@ -78,6 +120,38 @@
 
 ---
 
+## 📊 **Evolution System**
+
+The evolution system allows players to unlock premium drug variants through dedicated dealing:
+
+### **Unlock Requirements**
+- **Weed → Chronic Kush**: Sell 25 weed units
+- **Cocaine → Pure Colombian**: Sell 20 cocaine units  
+- **Meth → Blue Crystal**: Sell 15 meth units
+
+### **Progress Tracking**
+- Real-time notifications for milestones (25%, 50%, 75%, 90%, 95%)
+- Persistent progress across server restarts
+- Visual progress indicators with enhanced ox_lib notifications
+
+### **Evolution Benefits**
+| Standard Drug | Evolved Variant | Price Increase | Benefits |
+|---------------|-----------------|----------------|----------|
+| Weed ($50) | Chronic Kush ($85) | +70% | Premium quality, better reputation |
+| Cocaine ($120) | Pure Colombian ($200) | +67% | Higher purity, increased demand |
+| Meth ($180) | Blue Crystal ($300) | +67% | Laboratory grade, maximum potency |
+
+## 🎮 **Admin Commands**
+
+| Command | Description | Permission Required |
+|---------|-------------|-------------------|
+| `/clearevodata [player_id]` | Clear evolution progress for player | `bldr.drugs.admin` |
+| `/dbcheck` | Verify database evolution tables | `bldr.drugs.admin` |
+| `/setunlocked [player_id] [drug]` | Force unlock evolved drug | `bldr.drugs.admin` |
+| `/checkprogress [player_id]` | View player's evolution progress | `bldr.drugs.admin` |
+
+---
+
 ## ⚙️ **Configuration**
 
 ### 💰 **Money & Rewards Configuration**
@@ -88,6 +162,33 @@ Config.Money = {
   markedBillsChance = 0.8, -- 80% chance to get markedbills, 20% cash
   markedBillsItem = 'markedbills', -- Item name for marked bills
 }
+```
+
+### 🧬 **Evolution System Configuration**
+```lua
+Config.Evolution = {
+    enabled = true,
+    thresholds = {
+        weed = 25,      -- Sales needed for Chronic Kush
+        cocaine = 20,   -- Sales needed for Pure Colombian  
+        meth = 15       -- Sales needed for Blue Crystal
+    },
+    notifications = {
+        enabled = true,
+        milestones = {25, 50, 75, 90, 95}, -- Progress percentages to notify
+        style = "ox_lib" -- Enhanced notifications with better visibility
+    }
+}
+```
+
+### 🔐 **Permissions Configuration**
+```cfg
+# In server.cfg or permissions.cfg
+add_ace group.admin bldr.drugs.admin allow
+add_ace group.moderator bldr.drugs.admin allow
+
+# Give specific users admin access
+add_ace identifier.steam:110000XXXXXXXX bldr.drugs.admin allow
 ```
 
 ### 🐛 **Debug System**
@@ -172,6 +273,111 @@ Config.NPCs = {
 ### 🎯 **Testing Commands**
 ```bash
 /bldr_test_nui                        # Test NUI interface
+```
+
+### 🧪 **Evolution System Commands** (NEW in v2.7)
+```bash
+/checkevolution [player_id]           # Check drug evolution progress
+/debugunlocks [player_id]             # View all evolution unlock states
+/forceunlock [player_id] [recipe_key] # Manually unlock evolution recipes (admin)
+/clearevodata [player_id] [item]      # Clear evolution data for testing (admin)
+```
+
+### 🔧 **Data Management Commands** (NEW in v2.7)
+```bash
+# Clear specific drug evolution data
+/clearevodata [player_id] meth        # Clear meth evolution progress
+/clearevodata [player_id] weed        # Clear weed evolution progress  
+/clearevodata [player_id] cocaine     # Clear cocaine evolution progress
+/clearevodata [player_id] all         # Clear all evolution data
+
+# Testing and debugging
+/dbcheck [player_id]                  # Check database entries directly
+/testexactsyntax                      # Test database connection and syntax
+```
+
+---
+
+## 🧬 **Drug Evolution System** (NEW in v2.7)
+
+### 🌟 **Overview**
+Transform your drug empire with the new **Evolution System**! As you sell drugs and build your reputation, unlock powerful evolved versions with better profits and enhanced effects.
+
+### 📈 **How It Works**
+- **Progress Tracking**: Every drug sale counts toward evolution thresholds
+- **Smart Notifications**: Get alerted at 75%, 90%, 95% completion and when unlocked
+- **Physical Crafting**: Use dedicated crafting tables to create evolved drugs
+- **Persistent Progress**: All progress saved across server restarts
+
+### 🎯 **Evolution Thresholds**
+| Drug Type | Sales Required | Evolved Recipe Unlocked | Evolved Product |
+|-----------|----------------|------------------------|-----------------|
+| 🌿 **Weed** | 25 sales | Enhanced Kush variants | Chronic Kush ($85) |
+| ❄️ **Cocaine** | 20 sales | Pure Colombian grade | Pure Colombian ($200) |
+| 🧪 **Meth** | 15 sales | Crystal blue formula | Blue Crystal ($300) |
+
+### 💎 **Evolved Drug Benefits**
+Once crafted, evolved drugs offer significant advantages:
+
+| Product | Base Price | XP Bonus | Success Rate | Level Req |
+|---------|------------|----------|--------------|-----------|
+| **Chronic Kush** | $85 (+70%) | 8 XP (+60%) | 96% | Level 1+ |
+| **Pure Colombian** | $200 (+67%) | 12 XP (+50%) | 88% | Level 3+ |
+| **Blue Crystal** | $300 (+67%) | 15 XP (+50%) | 83% | Level 4+ |
+
+### 🏭 **Crafting System**
+- **Physical Locations**: Find crafting tables at secret locations
+- **Third-Eye Integration**: Use qb-target to interact with crafting stations
+- **Recipe Requirements**: Need base drugs + evolution materials
+- **Progressive Unlocks**: Higher tier recipes require more sales
+- **Sellable Products**: All evolved drugs can be sold for higher profits
+
+### 📊 **Progress Notifications**
+Players receive automatic notifications at key milestones:
+- **75% Complete**: `"You're getting close to unlocking evolved weed! (18/25 sales)"`
+- **90% Complete**: `"Almost there! Just 2 more meth sales needed!"`
+- **95% Complete**: `"One more cocaine sale and you'll unlock the next tier!"`
+- **Unlocked**: `"🎉 Evolution unlocked! You can now craft enhanced cocaine!"`
+
+### 🔧 **Admin Management**
+Monitor and manage player progression:
+```bash
+# Check any player's evolution progress
+/checkevolution 1
+# Output: "Weed: 18/25 (72%) | Cocaine: 15/20 (75%) | Meth: 12/15 (80%)"
+
+# View all unlock states for debugging
+/debugunlocks 1  
+# Shows which recipes are LOCKED/UNLOCKED
+
+# Force unlock for testing
+/forceunlock 1 recipe_evo_meth_lvl1
+```
+
+### 📍 **Crafting Table Locations**
+Evolved drugs are crafted at special locations (configurable):
+- **Default Location**: Mirror Park area (customizable coordinates)
+- **Third-Eye Required**: qb-target integration for interactions
+- **Secure Access**: Only players with unlocked recipes can craft
+
+### 🎨 **Enhanced Notification System** (v2.7)
+**Improved notification styling for better visibility:**
+- **ox_lib Priority**: Uses ox_lib notifications when available for better styling
+- **Dark Backgrounds**: High contrast with white text for readability
+- **Color-Coded Borders**: Green (success), Red (error), Orange (warning)
+- **Custom Styling**: Enhanced evolution notifications with emojis and clear messaging
+- **Fallback Support**: Uses QBCore notifications if ox_lib unavailable
+
+**Configuration Options:**
+```lua
+Config.Evolution = {
+  notify = 'ox',                -- 'qb' | 'ox' | 'chat'
+  notifications = {
+    enabled = true,             -- Enable progress notifications
+    milestones = {75, 90, 95},  -- Notify at these percentages
+    nearUnlockThreshold = 95,   -- Special "almost there" message
+  }
+}
 ```
 
 ---
@@ -284,6 +490,8 @@ ensure bldr-drugs
 - Test with debug mode enabled
 
 ### 🔄 **Version History**
+- **v2.7**: Drug Evolution System, crafting tables, progressive unlocks, admin tools
+- **v2.6**: Smart NPC filtering, anti-shop protection, blacklist system
 - **v2.5**: Enhanced NPC interactions, markedbills system, money types, debug controls
 - **v2.1**: Third-eye integration, UI improvements, zone protection
 - **v2.0**: Dynamic NPC system, XP progression, advanced UI
@@ -348,6 +556,17 @@ SOURCE path/to/bldr-drugs/sql/migration.sql;
 SOURCE path/to/bldr-drugs/sql/add_missing_columns.sql;
 ```
 
+**Evolution System Database (NEW in v2.7)**
+The evolution system requires additional tables. Run this migration:
+```sql
+-- For evolution system (new in v2.7)
+SOURCE path/to/bldr-drugs/sql/migration_evolution.sql;
+```
+
+This creates:
+- `drug_evolution_progress` - Tracks total revenue per player
+- `drug_evolution_unlocks` - Stores unlocked recipes and progress
+
 ### **3. Server Configuration**
 Add to your `server.cfg`:
 ```lua
@@ -358,12 +577,43 @@ ensure bldr-drugs
 Add drug items to your QBCore shared items:
 ```lua
 -- In qb-core/shared/items.lua
+
+-- Standard Drug Items
 ['weed'] = {['name'] = 'weed', ['label'] = 'Weed', ['weight'] = 100, ['type'] = 'item', ['image'] = 'weed.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'High quality street weed'},
 ['cocaine'] = {['name'] = 'cocaine', ['label'] = 'Cocaine', ['weight'] = 50, ['type'] = 'item', ['image'] = 'cocaine.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Pure Colombian powder'},
 ['heroin'] = {['name'] = 'heroin', ['label'] = 'Heroin', ['weight'] = 30, ['type'] = 'item', ['image'] = 'heroin.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'High grade black tar'},
 ['meth'] = {['name'] = 'meth', ['label'] = 'Meth', ['weight'] = 40, ['type'] = 'item', ['image'] = 'meth.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Crystal blue persuasion'},
-['xtc'] = {['name'] = 'xtc', ['label'] = 'Ecstasy', ['weight'] = 20, ['type'] = 'item', ['image'] = 'xtc.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Party pills for the night'}
+['xtc'] = {['name'] = 'xtc', ['label'] = 'Ecstasy', ['weight'] = 20, ['type'] = 'item', ['image'] = 'xtc.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Party pills for the night'},
+
+-- Evolved Drug Items (NEW in v2.7)
+['evo_weed_chronic'] = {['name'] = 'evo_weed_chronic', ['label'] = 'Chronic Kush', ['weight'] = 80, ['type'] = 'item', ['image'] = 'chronic_kush.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Premium evolved cannabis strain - 70% more valuable'},
+['evo_cocaine_pure'] = {['name'] = 'evo_cocaine_pure', ['label'] = 'Pure Colombian', ['weight'] = 40, ['type'] = 'item', ['image'] = 'pure_cocaine.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Pharmaceutical grade cocaine - 67% more valuable'},
+['evo_meth_l1'] = {['name'] = 'evo_meth_l1', ['label'] = 'Blue Crystal', ['weight'] = 30, ['type'] = 'item', ['image'] = 'blue_crystal.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Laboratory grade methamphetamine - 67% more valuable'}
 ```
+
+### **5. Image Files Setup**
+Copy the evolved drug images from the `images/` folder to your inventory script:
+
+**For qb-inventory:**
+```bash
+# Copy images to qb-inventory
+Copy-Item "resources/[standalone]/bldr-drugs/images/*" "resources/[qb]/qb-inventory/html/images/"
+```
+
+**For ox_inventory:**
+```bash
+# Copy images to ox_inventory
+Copy-Item "resources/[standalone]/bldr-drugs/images/*" "resources/[ox]/ox_inventory/web/images/"
+```
+
+**Required Image Files (NEW in v2.7):**
+- `chronic_kush.png` - Evolved weed variant
+- `pure_cocaine.png` - Evolved cocaine variant
+- `blue_crystal.png` - Evolved meth variant
+
+**📁 Image Location:** All evolved drug image files are provided in the `images/` folder within this resource.
+
+**Note:** Standard drug images (weed, cocaine, heroin, meth, xtc) should already exist in your inventory system.
 
 ---
 
@@ -493,12 +743,15 @@ The system now automatically creates and updates database tables:
 ```lua
 /adddrugxp [playerid] [amount]     -- Add XP to player
 /checkdrugstats [playerid]         -- View player statistics
+/checkevolution [playerid]         -- Check evolution progress (optional playerid for admins)
 ```
 
 ### **Admin Examples**
 ```lua
 /adddrugxp 1 500          -- Give player ID 1 500 XP
 /checkdrugstats 1         -- Check stats for player ID 1
+/checkevolution           -- Check your own evolution progress
+/checkevolution 1         -- Check player ID 1's evolution progress (admin only)
 ```
 
 ---
@@ -790,12 +1043,108 @@ Want to help shape the future of BDLR-Drugs? Here's how:
 
 ---
 
-## �📜 **License**
+## 📋 **Detailed Technical Changelog**
+
+### **v2.7.0 - Evolution System Release** *(October 2025)*
+
+#### **🆕 New Files & Components**
+- **SQL Migration Scripts**: 
+  - `sql/add_missing_columns.sql` - Database structure updates
+  - `sql/migration_evolution.sql` - Evolution system tables
+- **Evolution Functions**: Complete evolution tracking system in `server.lua`
+- **Enhanced Notifications**: Improved CustomNotify function with ox_lib integration
+
+#### **🔧 Core System Changes**
+
+**server.lua Enhancements:**
+- **New Functions Added**:
+  - `evoTryUnlocks()` - Check and trigger evolution unlocks
+  - `evoSetUnlocked()` - Mark evolution as unlocked for player
+  - `evoIsUnlocked()` - Check if player has evolution unlocked
+  - `CustomNotify()` - Enhanced notification system with ox_lib priority
+- **Admin Commands Added**:
+  - `/clearevodata [player_id]` - Clear evolution progress
+  - `/dbcheck` - Verify database tables
+  - `/setunlocked [player_id] [drug]` - Force unlock evolutions
+  - `/checkprogress [player_id]` - View evolution progress
+- **Database Integration**: MySQL queries for persistent evolution tracking
+- **Debug System**: Comprehensive logging for evolution events
+
+**client.lua Improvements:**
+- **Enhanced CustomNotify**: Better styling with dark backgrounds and ox_lib fallback
+- **Crafting Table Integration**: qb-target interactions for evolution crafting
+- **Improved Error Handling**: Better function availability checks
+
+**config.lua Additions:**
+- **Evolution Configuration**: Thresholds, notifications, and styling options
+- **Evolved Drug Pricing**: Premium pricing for evolved variants
+- **Sellable Items**: Added evolved drugs to sellable items list
+
+#### **🗃️ Database Schema Changes**
+```sql
+-- New Tables Added:
+CREATE TABLE `drug_evolution_progress` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `citizenid` varchar(50) NOT NULL,
+  `drug_type` varchar(50) NOT NULL,
+  `sales_count` int(11) DEFAULT 0,
+  `total_revenue` decimal(10,2) DEFAULT 0.00,
+  `last_updated` timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_player_drug` (`citizenid`,`drug_type`)
+);
+
+CREATE TABLE `drug_evolution_unlocks` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `citizenid` varchar(50) NOT NULL,
+  `drug_type` varchar(50) NOT NULL,
+  `unlocked_at` timestamp DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_unlock` (`citizenid`,`drug_type`)
+);
+```
+
+#### **🎨 UI/UX Improvements**
+- **Notification Styling**: Dark backgrounds with improved text visibility
+- **ox_lib Integration**: Better notification positioning and styling
+- **Progress Indicators**: Visual feedback for evolution milestones
+- **Responsive Design**: Consistent experience across notification types
+
+#### **⚡ Performance Optimizations**
+- **Efficient Database Queries**: Optimized evolution tracking queries
+- **Smart Caching**: Reduced database calls with intelligent caching
+- **Error Handling**: Improved error catching and logging
+- **Resource Management**: Better memory usage and cleanup
+
+#### **🛠️ Bug Fixes & Stability**
+- **Function Order**: Fixed dependency issues between functions
+- **Database Type Handling**: Resolved boolean/integer unlock detection
+- **Notification Reliability**: Enhanced notification delivery system
+- **Error Prevention**: Added comprehensive error checking
+
+#### **📚 Documentation Updates**
+- **Complete Evolution Guide**: Detailed setup and configuration instructions
+- **Admin Command Reference**: Comprehensive command documentation
+- **Item Configuration**: Updated item definitions with evolved variants
+- **Troubleshooting Guide**: Common issues and solutions
+
+### **Previous Versions**
+- **v2.6.0**: Smart NPC filtering system, enhanced interaction detection
+- **v2.5.0**: Third-eye integration, universal selling system
+- **v2.4.0**: Advanced UI redesign, cyberpunk styling
+- **v2.3.0**: XP system, reputation mechanics
+- **v2.2.0**: Police integration, wanted system
+- **v2.1.0**: Territory control, location-based dealing
+- **v2.0.0**: Complete system rewrite, QBCore integration
+
+---
+
+## 📜 **License**
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-**🌟 Made with ❤️ by Blakethepet and BLDR CHAT**
+**🌟 Made with ❤️ by Blakethepet, Negan, and BLDR CHAT**
 
 *Transform your FiveM server with the most advanced drug dealing system available!*
