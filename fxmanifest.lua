@@ -2,8 +2,8 @@ fx_version 'cerulean'
 game 'gta5'
 
 author 'BLDR Team'
-description 'bldr-drugs - drug selling with XP, persistence, police checks, tokens and logging (Stage A)'
-version '1.1.0'
+description 'bldr-drugs - Advanced Drug Dealing System with Evolution & XP Progression'
+version '2.7.0'
 
 shared_script 'config.lua'
 
