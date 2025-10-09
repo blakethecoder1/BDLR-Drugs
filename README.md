@@ -1,6 +1,11 @@
 # 🌿 BLDR-Drugs v2.7 - Advanced Drug Dealing System
 **Next-Generation Drug Dealing for QBCore FiveM Servers**
 
+
+Need Support? Join my Discord for some Help
+https://discord.gg/z77DxVB6
+
+
 ![FiveM](https://img.shields.io/badge/FiveM-QBCore-green)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Version](https://img.shields.io/badge/Version-2.7-brightgreen)
