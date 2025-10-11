@@ -1,13 +1,8 @@
 # 🌿 BLDR-Drugs v2.7 - Advanced Drug Dealing System
 **Next-Generation Drug Dealing for QBCore FiveM Servers**
 
-
-Need Support? Join my Discord for some Help
-https://discord.gg/z77DxVB6
-
-
 ![FiveM](https://img.shields.io/badge/FiveM-QBCore-green)
-![License](https://img.shields.io/badge/License-MIT-blue)
+![License](https://img.shields.io/badge/License-Custom%20Commercial-red)
 ![Version](https://img.shields.io/badge/Version-2.7-brightgreen)
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-success)
 
@@ -146,6 +141,41 @@ The evolution system allows players to unlock premium drug variants through dedi
 | Cocaine ($120) | Pure Colombian ($200) | +67% | Higher purity, increased demand |
 | Meth ($180) | Blue Crystal ($300) | +67% | Laboratory grade, maximum potency |
 
+## 🧪 **Purity System** (NEW in v2.7)
+
+The purity system adds realistic quality mechanics where drug quality affects pricing and success rates:
+
+### **Purity Levels**
+| Purity Range | Quality Level | Price Effect | Rejection Chance | Success Rate |
+|--------------|---------------|--------------|------------------|--------------|
+| 0-25% | Terrible Quality | -60% price | 70% rejection | 30% success |
+| 26-40% | Poor Quality | -40% price | 50% rejection | 50% success |
+| 41-60% | Average Quality | -20% price | 25% rejection | 75% success |
+| 61-80% | Good Quality | Normal price | 10% rejection | 90% success |
+| 81-95% | Excellent Quality | +30% price | 5% rejection | 95% success |
+| 96-100% | Laboratory Pure | +60% price | 2% rejection | 98% success |
+
+### **How Purity Works**
+- **Random Generation**: Standard drugs get 40-80% purity by default
+- **Evolved Drug Advantage**: Evolved drugs have guaranteed 85-98% purity
+- **Visual Feedback**: Notifications show purity level with icons and bonuses
+- **Rejection Messages**: NPCs refuse low-quality drugs with realistic responses
+- **Price Impact**: Higher purity = better prices, lower purity = significant penalties
+
+### **Purity Examples**
+- **💩 Terrible (15%)**: "This is garbage! I'm not buying this trash!"
+- **📉 Poor (35%)**: "This quality is way too low for me."
+- **⚖️ Average (55%)**: Normal transaction, standard pricing
+- **✅ Good (75%)**: Reliable quality, good success rate
+- **🏆 Excellent (90%)**: Premium pricing, almost guaranteed success
+- **💎 Laboratory Pure (98%)**: Maximum bonuses, virtually no rejection
+
+### **📦 Inventory Purity Display** (NEW Enhancement)
+- **Evolved drugs** now show purity information directly in your inventory
+- Item descriptions include the exact purity percentage and quality level
+- Example: "Premium evolved cannabis strain | Excellent Quality (92% Purity)"
+- Makes it easy to see your product quality before attempting sales
+
 ## 🎮 **Admin Commands**
 
 | Command | Description | Permission Required |
@@ -182,6 +212,75 @@ Config.Evolution = {
         enabled = true,
         milestones = {25, 50, 75, 90, 95}, -- Progress percentages to notify
         style = "ox_lib" -- Enhanced notifications with better visibility
+    }
+}
+```
+
+### 🧪 **Purity System Configuration** (NEW in v2.7)
+```lua
+Config.Purity = {
+    enabled = true,              -- Enable purity/quality system
+    
+    -- Purity levels and their effects
+    levels = {
+        ['terrible'] = {
+            threshold = 25,          -- 0-25% purity
+            priceMultiplier = 0.4,   -- 60% price reduction
+            successChance = 0.3,     -- 30% base success chance
+            rejectionChance = 0.7,   -- 70% chance of rejection
+            label = 'Terrible Quality',
+            description = 'Heavily cut and contaminated'
+        },
+        ['poor'] = {
+            threshold = 40,          -- 26-40% purity
+            priceMultiplier = 0.6,   -- 40% price reduction  
+            successChance = 0.5,     -- 50% base success chance
+            rejectionChance = 0.5,   -- 50% chance of rejection
+            label = 'Poor Quality',
+            description = 'Low grade and heavily diluted'
+        },
+        ['average'] = {
+            threshold = 60,          -- 41-60% purity
+            priceMultiplier = 0.8,   -- 20% price reduction
+            successChance = 0.75,    -- 75% base success chance
+            rejectionChance = 0.25,  -- 25% chance of rejection
+            label = 'Average Quality',
+            description = 'Standard street quality'
+        },
+        ['good'] = {
+            threshold = 80,          -- 61-80% purity
+            priceMultiplier = 1.0,   -- Normal price
+            successChance = 0.9,     -- 90% base success chance
+            rejectionChance = 0.1,   -- 10% chance of rejection
+            label = 'Good Quality',
+            description = 'High grade product'
+        },
+        ['excellent'] = {
+            threshold = 95,          -- 81-95% purity
+            priceMultiplier = 1.3,   -- 30% price bonus
+            successChance = 0.95,    -- 95% base success chance
+            rejectionChance = 0.05,  -- 5% chance of rejection
+            label = 'Excellent Quality',
+            description = 'Premium grade substance'
+        },
+        ['pure'] = {
+            threshold = 100,         -- 96-100% purity
+            priceMultiplier = 1.6,   -- 60% price bonus
+            successChance = 0.98,    -- 98% base success chance
+            rejectionChance = 0.02,  -- 2% chance of rejection
+            label = 'Laboratory Pure',
+            description = 'Pharmaceutical grade purity'
+        }
+    },
+    
+    -- Purity generation for items without metadata
+    defaultPurity = {
+        min = 40,                  -- Minimum purity for items without metadata
+        max = 80,                  -- Maximum purity for items without metadata
+        evolved = {
+            min = 85,              -- Minimum purity for evolved drugs
+            max = 98               -- Maximum purity for evolved drugs
+        }
     }
 }
 ```
@@ -506,7 +605,29 @@ ensure bldr-drugs
 
 ## 📜 **License**
 
-This project is licensed under the MIT License - feel free to modify and distribute.
+This project is licensed under a **Custom Commercial License** with the following terms:
+
+### **Permitted Uses:**
+✅ **Personal Use** - Free to use on your own server  
+✅ **Modification** - You can modify the code for your own use  
+✅ **Private Distribution** - Share with friends/community (non-commercial)  
+
+### **Restricted Uses:**
+❌ **Commercial Resale** - Cannot resell or distribute for profit WITHOUT written permission  
+❌ **Paid Access** - Cannot charge money for access to this script WITHOUT permission  
+❌ **Commercial Hosting** - Cannot use on paid hosting services WITHOUT permission  
+
+### **Commercial Permission:**
+💼 **Want to use commercially?** Contact the original authors for licensing agreements  
+📧 **Permission Required** - Written consent needed for any profit-generating use  
+💰 **Revenue Sharing** - Commercial licensing may require revenue sharing or fees  
+
+### **Attribution Required:**
+📋 **Copyright Notice** - Must include original author credits  
+📋 **License Text** - Must include this license with any distribution  
+🚫 **No Warranty** - Software provided "as-is" without warranty
+
+**For commercial licensing inquiries, contact: [Your Contact Information]**
 
 **Happy Dealing! 🌿💰**
 - **Price estimation** with risk assessment
@@ -590,10 +711,10 @@ Add drug items to your QBCore shared items:
 ['meth'] = {['name'] = 'meth', ['label'] = 'Meth', ['weight'] = 40, ['type'] = 'item', ['image'] = 'meth.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Crystal blue persuasion'},
 ['xtc'] = {['name'] = 'xtc', ['label'] = 'Ecstasy', ['weight'] = 20, ['type'] = 'item', ['image'] = 'xtc.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Party pills for the night'},
 
--- Evolved Drug Items (NEW in v2.7)
-['evo_weed_chronic'] = {['name'] = 'evo_weed_chronic', ['label'] = 'Chronic Kush', ['weight'] = 80, ['type'] = 'item', ['image'] = 'chronic_kush.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Premium evolved cannabis strain - 70% more valuable'},
-['evo_cocaine_pure'] = {['name'] = 'evo_cocaine_pure', ['label'] = 'Pure Colombian', ['weight'] = 40, ['type'] = 'item', ['image'] = 'pure_cocaine.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Pharmaceutical grade cocaine - 67% more valuable'},
-['evo_meth_l1'] = {['name'] = 'evo_meth_l1', ['label'] = 'Blue Crystal', ['weight'] = 30, ['type'] = 'item', ['image'] = 'blue_crystal.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Laboratory grade methamphetamine - 67% more valuable'}
+-- Evolved Drug Items (NEW in v2.7) - Now with Dynamic Purity Display
+['evo_weed_chronic'] = {['name'] = 'evo_weed_chronic', ['label'] = 'Chronic Kush', ['weight'] = 80, ['type'] = 'item', ['image'] = 'chronic_kush.png', ['unique'] = true, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Premium evolved cannabis strain - Shows purity in inventory'},
+['evo_cocaine_pure'] = {['name'] = 'evo_cocaine_pure', ['label'] = 'Pure Colombian', ['weight'] = 40, ['type'] = 'item', ['image'] = 'pure_cocaine.png', ['unique'] = true, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Pharmaceutical grade cocaine - Shows purity in inventory'},
+['evo_meth_l1'] = {['name'] = 'evo_meth_l1', ['label'] = 'Blue Crystal', ['weight'] = 30, ['type'] = 'item', ['image'] = 'blue_crystal.png', ['unique'] = true, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Laboratory grade methamphetamine - Shows purity in inventory'}
 ```
 
 ### **5. Image Files Setup**
@@ -1146,7 +1267,9 @@ CREATE TABLE `drug_evolution_unlocks` (
 
 ## 📜 **License**
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under a **Custom Commercial License** - see above for details.
+
+**Commercial use requires written permission from the original authors.**
 
 ---
 
