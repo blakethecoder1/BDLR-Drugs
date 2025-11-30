@@ -1,44 +1,44 @@
-# 🌿 BLDR-Drugs v2.7 - Advanced Drug Dealing System
+# 🌿 BLDR-Drugs v2.8 - Advanced Drug Dealing System
 **Next-Generation Drug Dealing for QBCore FiveM Servers**
+
+> **Author:** blakethepet | **Framework:** QBCore | **Status:** Production Ready
 
 ![FiveM](https://img.shields.io/badge/FiveM-QBCore-green)
 ![License](https://img.shields.io/badge/License-Custom%20Commercial-red)
-![Version](https://img.shields.io/badge/Version-2.7-brightgreen)
+![Version](https://img.shields.io/badge/Version-2.8-brightgreen)
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-success)
+![Author](https://img.shields.io/badge/Author-blakethepet-blue)
 
 ---
 
-## � **Changelog - v2.7 Evolution Update**
+## 📋 **Changelog - v2.8 UI Customization Update**
 
-### 🆕 **Major Features Added**
-- **Drug Evolution System**: Unlock premium drug variants through dedicated dealing
-- **Progress Tracking**: Real-time notifications for evolution milestones (25%, 50%, 75%, 90%, 95%)
-- **Evolved Drug Selling**: Premium variants sellable with 67-70% price increases
-- **Enhanced Notifications**: Improved visibility with ox_lib integration and custom styling
-- **Admin Evolution Tools**: Comprehensive commands for testing and management
+### 🎨 **Major Features Added**
+- **In-UI Color Customizer**: Change UI colors directly from the interface with live preview
+- **Real-Time Theme Preview**: See color changes instantly as you adjust them
+- **6 Preset Themes**: Quick-apply themes (Default Green, Blue, Purple, Red, Gold, Cyan)
+- **Individual Color Controls**: Customize primary, success, warning, error, text, and muted text colors
+- **Hex Color Inputs**: Use visual pickers or type hex codes directly
+- **Theme Persistence**: Color choices saved and applied automatically
 
 ### 🔧 **Technical Improvements**
-- **Database Integration**: New tables for persistent evolution progress tracking
-- **Crafting Table System**: Interactive evolution crafting with qb-target integration
-- **Enhanced CustomNotify**: Better notification styling with dark backgrounds and ox_lib priority
-- **Debug Logging**: Extensive debug system for evolution tracking and troubleshooting
-- **Function Reorganization**: Improved code structure and error handling
+- **CSS Variable System**: Dynamic color theming without config edits or restarts
+- **NUI Color API**: Seamless communication between UI and Lua for color saving
+- **Command-Based Controls**: `/bldr_setcolor`, `/bldr_setgradient`, `/bldr_showcolors`, `/bldr_resetcolors`, `/bldr_savecolors`
+- **Config-Based Defaults**: `Config.UI.colors` and `Config.UI.gradients` for server-wide defaults
+
+### ❌ **Removed Systems**
+- **Purity System Completely Removed**: All purity mechanics, quality checks, and rejection systems have been removed for streamlined gameplay
+- **Config.Purity Removed**: No longer needed in configuration
+- **Simplified Price Calculation**: Prices now based purely on base value and level multipliers
+- **Evolution System Preserved**: Drug evolution and progression mechanics remain fully functional
 
 ### 🎨 **UI/UX Enhancements**
-- **Better Notification Visibility**: Dark backgrounds with improved text contrast
-- **ox_lib Integration**: Enhanced notification system with better styling and positioning
-- **Preserved UI Themes**: Maintained existing dark theme while improving readability
-- **Responsive Design**: Consistent experience across all notification types
-
-### 🗃️ **Database Changes**
-- **New Tables**: `drug_evolution_progress` and `drug_evolution_unlocks`
-- **Persistent Progress**: Evolution data survives server restarts
-- **Optimized Queries**: Efficient database operations for real-time tracking
-
-### ⚙️ **Configuration Updates**
-- **Evolution Thresholds**: Configurable sales requirements (15 meth, 20 cocaine, 25 weed)
-- **Evolved Drug Pricing**: Premium pricing configuration with significant value increases
-- **Notification Settings**: Customizable milestone notifications and styling options
+- **Theme Button (🎨)**: Prominent theme customizer button in UI header
+- **Color Modal**: Beautiful modal with organized color controls and presets
+- **Synchronized Inputs**: Color pickers and hex text inputs stay in sync
+- **Reset Option**: Quickly restore default theme with one click
+- **Responsive Design**: Modal works perfectly on all screen resolutions
 
 ---
 
@@ -112,6 +112,10 @@
 | **7** | Drug Lord | 12,000 XP | 2.0x |
 
 ### 🎨 **Enhanced UI Experience**
+- **Fully Customizable Colors** - change the entire UI theme to match your server
+- **In-UI Theme Editor** - click the 🎨 button to customize colors without config edits
+- **6 Preset Themes** - instantly apply professional color schemes
+- **Real-Time Preview** - see changes live as you customize
 - **Semi-transparent interface** - see the world behind while dealing
 - **Cyberpunk styling** with glowing effects and animations
 - **Real-time XP tracking** with animated progress bars
@@ -141,40 +145,61 @@ The evolution system allows players to unlock premium drug variants through dedi
 | Cocaine ($120) | Pure Colombian ($200) | +67% | Higher purity, increased demand |
 | Meth ($180) | Blue Crystal ($300) | +67% | Laboratory grade, maximum potency |
 
-## 🧪 **Purity System** (NEW in v2.7)
+## 🎨 **UI Customization System** (NEW in v2.8)
 
-The purity system adds realistic quality mechanics where drug quality affects pricing and success rates:
+Personalize the drug dealing interface with a powerful theme customization system:
 
-### **Purity Levels**
-| Purity Range | Quality Level | Price Effect | Rejection Chance | Success Rate |
-|--------------|---------------|--------------|------------------|--------------|
-| 0-25% | Terrible Quality | -60% price | 70% rejection | 30% success |
-| 26-40% | Poor Quality | -40% price | 50% rejection | 50% success |
-| 41-60% | Average Quality | -20% price | 25% rejection | 75% success |
-| 61-80% | Good Quality | Normal price | 10% rejection | 90% success |
-| 81-95% | Excellent Quality | +30% price | 5% rejection | 95% success |
-| 96-100% | Laboratory Pure | +60% price | 2% rejection | 98% success |
+### **In-UI Theme Editor**
+- **Click the 🎨 button** in the UI header to open the theme customizer
+- **Live Preview**: See color changes instantly as you adjust them
+- **Visual Color Pickers**: Use HTML5 color pickers or type hex codes
+- **Synchronized Inputs**: Color picker and text input stay in sync automatically
 
-### **How Purity Works**
-- **Random Generation**: Standard drugs get 40-80% purity by default
-- **Evolved Drug Advantage**: Evolved drugs have guaranteed 85-98% purity
-- **Visual Feedback**: Notifications show purity level with icons and bonuses
-- **Rejection Messages**: NPCs refuse low-quality drugs with realistic responses
-- **Price Impact**: Higher purity = better prices, lower purity = significant penalties
+### **Customizable Colors**
+| Color Type | Default | Description |
+|------------|---------|-------------|
+| **Primary** | #00ff88 (Green) | Main accent color, borders, headers |
+| **Success** | #00ff88 (Green) | Success messages, confirmations |
+| **Warning** | #ffaa00 (Orange) | Warning messages, cautions |
+| **Error** | #ff4444 (Red) | Error messages, rejections |
+| **Text** | #ffffff (White) | Main text color |
+| **Text Muted** | #a0a0a0 (Gray) | Secondary text, descriptions |
 
-### **Purity Examples**
-- **💩 Terrible (15%)**: "This is garbage! I'm not buying this trash!"
-- **📉 Poor (35%)**: "This quality is way too low for me."
-- **⚖️ Average (55%)**: Normal transaction, standard pricing
-- **✅ Good (75%)**: Reliable quality, good success rate
-- **🏆 Excellent (90%)**: Premium pricing, almost guaranteed success
-- **💎 Laboratory Pure (98%)**: Maximum bonuses, virtually no rejection
+### **6 Preset Themes**
+Quick-apply professional color schemes with one click:
+- 🟢 **Default (Green)** - Classic BLDR green theme
+- 🔵 **Blue** - Cool, professional blue accent
+- 🟣 **Purple** - Luxurious purple theme
+- 🔴 **Red** - Bold, dangerous red theme
+- 🟡 **Gold** - Premium gold accents
+- 🔷 **Cyan** - Futuristic cyan theme
 
-### **📦 Inventory Purity Display** (NEW Enhancement)
-- **Evolved drugs** now show purity information directly in your inventory
-- Item descriptions include the exact purity percentage and quality level
-- Example: "Premium evolved cannabis strain | Excellent Quality (92% Purity)"
-- Makes it easy to see your product quality before attempting sales
+### **Command-Based Color Control**
+For advanced users and server owners:
+- `/bldr_setcolor [type] [hex]` - Set individual colors (e.g., `/bldr_setcolor primary #ff0000`)
+- `/bldr_setgradient [type] [css]` - Set custom gradients
+- `/bldr_showcolors` - Display current color configuration
+- `/bldr_resetcolors` - Reset to default theme
+- `/bldr_savecolors` - Save current colors to config
+
+### **Configuration**
+```lua
+Config.UI = {
+    colors = {
+        primary = '#00ff88',      -- Main accent color
+        success = '#00ff88',      -- Success notifications
+        warning = '#ffaa00',      -- Warning notifications
+        error = '#ff4444',        -- Error notifications
+        text = '#ffffff',         -- Main text
+        textMuted = '#a0a0a0'     -- Secondary text
+    },
+    gradients = {
+        panel = 'linear-gradient(145deg, rgba(0,0,0,0.95), rgba(20,20,20,0.95))',
+        header = 'linear-gradient(145deg, rgba(0,255,136,0.1), rgba(0,180,100,0.05))',
+        xpBar = 'linear-gradient(90deg, #00ff88, #00cc6a)'
+    }
+}
+```
 
 ## 🎮 **Admin Commands**
 
@@ -216,74 +241,7 @@ Config.Evolution = {
 }
 ```
 
-### 🧪 **Purity System Configuration** (NEW in v2.7)
-```lua
-Config.Purity = {
-    enabled = true,              -- Enable purity/quality system
-    
-    -- Purity levels and their effects
-    levels = {
-        ['terrible'] = {
-            threshold = 25,          -- 0-25% purity
-            priceMultiplier = 0.4,   -- 60% price reduction
-            successChance = 0.3,     -- 30% base success chance
-            rejectionChance = 0.7,   -- 70% chance of rejection
-            label = 'Terrible Quality',
-            description = 'Heavily cut and contaminated'
-        },
-        ['poor'] = {
-            threshold = 40,          -- 26-40% purity
-            priceMultiplier = 0.6,   -- 40% price reduction  
-            successChance = 0.5,     -- 50% base success chance
-            rejectionChance = 0.5,   -- 50% chance of rejection
-            label = 'Poor Quality',
-            description = 'Low grade and heavily diluted'
-        },
-        ['average'] = {
-            threshold = 60,          -- 41-60% purity
-            priceMultiplier = 0.8,   -- 20% price reduction
-            successChance = 0.75,    -- 75% base success chance
-            rejectionChance = 0.25,  -- 25% chance of rejection
-            label = 'Average Quality',
-            description = 'Standard street quality'
-        },
-        ['good'] = {
-            threshold = 80,          -- 61-80% purity
-            priceMultiplier = 1.0,   -- Normal price
-            successChance = 0.9,     -- 90% base success chance
-            rejectionChance = 0.1,   -- 10% chance of rejection
-            label = 'Good Quality',
-            description = 'High grade product'
-        },
-        ['excellent'] = {
-            threshold = 95,          -- 81-95% purity
-            priceMultiplier = 1.3,   -- 30% price bonus
-            successChance = 0.95,    -- 95% base success chance
-            rejectionChance = 0.05,  -- 5% chance of rejection
-            label = 'Excellent Quality',
-            description = 'Premium grade substance'
-        },
-        ['pure'] = {
-            threshold = 100,         -- 96-100% purity
-            priceMultiplier = 1.6,   -- 60% price bonus
-            successChance = 0.98,    -- 98% base success chance
-            rejectionChance = 0.02,  -- 2% chance of rejection
-            label = 'Laboratory Pure',
-            description = 'Pharmaceutical grade purity'
-        }
-    },
-    
-    -- Purity generation for items without metadata
-    defaultPurity = {
-        min = 40,                  -- Minimum purity for items without metadata
-        max = 80,                  -- Maximum purity for items without metadata
-        evolved = {
-            min = 85,              -- Minimum purity for evolved drugs
-            max = 98               -- Maximum purity for evolved drugs
-        }
-    }
-}
-```
+
 
 ### 🔐 **Permissions Configuration**
 ```cfg
