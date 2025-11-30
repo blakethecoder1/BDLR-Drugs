@@ -5,7 +5,7 @@ Config.ResourceName = 'bldr-drugs'
 
 -- Debug settings
 Config.Debug = {
-  enabled = true,          -- Master debug toggle - set to true to enable debug output
+  enabled = false,          -- Master debug toggle - set to true to enable debug output
   showNPCs = true,        -- Show NPC debug info
   showSales = true,       -- Show sale transactions
   showSpawning = true,    -- Show NPC spawning/despawning
@@ -180,7 +180,7 @@ Config.Items = {
     description = 'Party pills for the night'
   },
 
-  -- EVOLVED DRUGS (Higher tier, better prices)
+  -- EVOLVED DRUGS (Higher tier, better prices) - Premium purity by default
   ['evo_weed_chronic'] = {
     label = 'Chronic Kush',
     basePrice = 85,           -- 70% more than regular weed
@@ -241,14 +241,35 @@ Config.EnableLogging = true
 
 -- Notification settings
 Config.Notifications = {
-  position = 'top-right',      -- top-left, top-right, bottom-left, bottom-right
-  duration = 4000,             -- milliseconds
+  position = 'center-right',   -- ox_lib supports: top-left, top-right, top-center, center-left, center-right, bottom-left, bottom-right, bottom-center
+  duration = 6500,             -- 6.5 seconds - slower so people can read
   useCustom = true,            -- Use custom bright notifications instead of default QBCore green
   customColors = {
-    success = '#00ffff',       -- Bright cyan instead of green
-    error = '#ff6666',         -- Bright red
-    info = '#66ccff',          -- Bright blue
-    warning = '#ffaa00'        -- Orange
+    success = '#00ffaa',       -- Bright mint green - easier to read
+    error = '#ff4444',         -- Bright red with good contrast
+    info = '#4da6ff',          -- Bright blue that pops
+    warning = '#ffaa00'        -- Orange for warnings
+  }
+}
+
+-- UI Color Customization
+Config.UI = {
+  colors = {
+    primary = '#00ff88',       -- Main accent color (borders, highlights)
+    secondary = '#0f3460',     -- Secondary color (backgrounds)
+    background = 'rgba(26, 26, 46, 0.85)',  -- Main background color
+    backgroundAlt = 'rgba(22, 33, 62, 0.85)', -- Alternative background
+    text = '#ffffff',          -- Primary text color
+    textMuted = '#cccccc',     -- Muted text color
+    success = '#00ff88',       -- Success color (level, XP bar)
+    warning = '#ffd700',       -- Warning/highlight color (title)
+    error = '#ff4444'          -- Error color
+  },
+  -- Gradient backgrounds (format: 'linear-gradient(angle, color1, color2)')
+  gradients = {
+    panel = 'linear-gradient(145deg, rgba(26, 26, 46, 0.85), rgba(22, 33, 62, 0.85))',
+    header = 'linear-gradient(90deg, #0f3460, #16213e)',
+    xpBar = 'linear-gradient(90deg, #00ff88, #00cc6a)'
   }
 }
 

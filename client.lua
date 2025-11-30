@@ -15,7 +15,7 @@ local npcCooldowns = {} -- Track NPCs we've recently dealt with: {entityId: expi
 -- Custom notification function with improved visibility
 local function CustomNotify(text, type, duration)
   local notifyType = type or 'info'
-  local notifyDuration = duration or 4000
+  local notifyDuration = duration or Config.Notifications.duration or 4000
   
   -- Convert type to ensure compatibility
   if notifyType == 'primary' then notifyType = 'info' end
@@ -26,7 +26,7 @@ local function CustomNotify(text, type, duration)
       title = 'BLDR-DRUGS',
       description = text,
       type = notifyType,
-      position = 'top-right',
+      position = Config.Notifications.position or 'top-right',
       duration = notifyDuration,
       style = {
         backgroundColor = 'rgba(0, 0, 0, 0.95)',
@@ -276,7 +276,9 @@ local function OpenDrugSelling(data)
       playerLevel = playerLevel,
       playerTitle = playerTitle or 'Street Rookie',
       playerXP = playerXP,
-      nextLevelXP = nextLevelXP or 0
+      nextLevelXP = nextLevelXP or 0,
+      colors = Config.UI and Config.UI.colors or nil,
+      gradients = Config.UI and Config.UI.gradients or nil
     })
   else
     -- Request token first
@@ -292,7 +294,9 @@ local function OpenDrugSelling(data)
           playerLevel = playerLevel,
           playerTitle = playerTitle or 'Street Rookie',
           playerXP = playerXP,
-          nextLevelXP = nextLevelXP or 0
+          nextLevelXP = nextLevelXP or 0,
+          colors = Config.UI and Config.UI.colors or nil,
+          gradients = Config.UI and Config.UI.gradients or nil
         })
       else
         debugPrint("Failed to get token, not opening UI")
@@ -402,7 +406,7 @@ RegisterNetEvent('bldr-drugs:openSelling', function(data)
   if data and data.entity and DoesEntityExist(data.entity) and not IsPedAPlayer(data.entity) then
     -- Check if this NPC is allowed for selling
     if not IsNPCAllowed(data.entity) then
-      CustomNotify('This person is not interested in your business', 'error', 3000)
+      CustomNotify('This person is not interested in your business', 'error')
       return
     end
     
@@ -410,7 +414,7 @@ RegisterNetEvent('bldr-drugs:openSelling', function(data)
     if IsNPCOnCooldown(data.entity) then
       local timeLeft = GetNPCCooldownTimeLeft(data.entity)
       if Config.NPCs.cooldownMessage then
-        CustomNotify('This person isn\'t interested right now. Try again in ' .. timeLeft .. ' seconds.', 'error', 3000)
+        CustomNotify('This person isn\'t interested right now. Try again in ' .. timeLeft .. ' seconds.', 'error')
       end
       return -- Don't proceed with opening the selling UI
     end
@@ -589,7 +593,7 @@ RegisterNUICallback('requestSell', function(data, cb)
     debugPrint("NPC is on cooldown for", timeLeft, "more seconds")
     
     if Config.NPCs.cooldownMessage then
-      CustomNotify('This person isn\'t interested right now. Try again in ' .. timeLeft .. ' seconds.', 'error', 3000)
+      CustomNotify('This person isn\'t interested right now. Try again in ' .. timeLeft .. ' seconds.', 'error')
     end
     
     cb({ success = false, reason = 'npc_cooldown', timeLeft = timeLeft })
@@ -674,7 +678,7 @@ RegisterNUICallback('requestSell', function(data, cb)
         xpText = " | +" .. result.xpGained .. " XP 📈"
       end
       
-      CustomNotify('Deal completed successfully!' .. rewardText .. xpText, 'success', 5000)
+      CustomNotify('Deal completed successfully!' .. rewardText .. xpText, 'success')
       
       -- Set cooldown on this NPC
       if nearbyNPC and DoesEntityExist(nearbyNPC.entity) then
@@ -687,7 +691,24 @@ RegisterNUICallback('requestSell', function(data, cb)
         playerLevel, playerTitle, playerMultiplier, nextLevelXP = GetPlayerLevelInfo(playerXP)
       end
     else
-      CustomNotify('Deal failed: ' .. (response.reason or 'unknown'), 'error')
+      -- Handle different types of failures with appropriate messages
+      local failureMessage = "Deal failed: "
+      
+      if response.reason == 'deal_failed' then
+        failureMessage = "🚫 The buyer wasn't interested this time."
+      elseif response.reason == 'level_too_low' then
+        failureMessage = "📛 You need more experience to sell this item."
+      elseif response.reason == 'not_enough' then
+        failureMessage = "📦 You don't have enough of this item."
+      elseif response.reason == 'rate_limit' then
+        failureMessage = "⏱️ Slow down! You're selling too fast."
+      elseif response.reason == 'cooldown' then
+        failureMessage = "⏳ Wait a bit before selling again."
+      else
+        failureMessage = failureMessage .. (response.reason or 'unknown')
+      end
+      
+      CustomNotify(failureMessage, 'error')
     end
     
     -- Reset interaction state after a delay
@@ -861,6 +882,33 @@ RegisterNUICallback('close', function(data, cb)
   cb('ok')
 end)
 
+-- Save color theme changes from UI
+RegisterNUICallback('saveColors', function(data, cb)
+  debugPrint("Received saveColors callback with data:", json.encode(data))
+  
+  if not data or not data.colors then
+    cb({ success = false, message = "Invalid color data" })
+    return
+  end
+  
+  local colors = data.colors
+  
+  -- Update config
+  Config.UI.colors.primary = colors.primary or Config.UI.colors.primary
+  Config.UI.colors.success = colors.success or Config.UI.colors.success
+  Config.UI.colors.warning = colors.warning or Config.UI.colors.warning
+  Config.UI.colors.error = colors.error or Config.UI.colors.error
+  Config.UI.colors.text = colors.text or Config.UI.colors.text
+  Config.UI.colors.textMuted = colors.textMuted or Config.UI.colors.textMuted
+  
+  debugPrint("Updated UI colors:", json.encode(Config.UI.colors))
+  
+  -- Notify success
+  CustomNotify('UI colors saved successfully!', 'success', 3000)
+  
+  cb({ success = true, message = "Colors saved" })
+end)
+
 -- Commands for testing
 RegisterCommand('bldr_request_token', function()
   RequestTradeToken()
@@ -921,8 +969,152 @@ RegisterCommand('bldr_test_nui', function()
     playerLevel = playerLevel or 0,
     playerTitle = playerTitle or 'Street Rookie',
     playerXP = playerXP or 0,
-    nextLevelXP = 100
+    nextLevelXP = 100,
+    colors = Config.UI and Config.UI.colors or nil,
+    gradients = Config.UI and Config.UI.gradients or nil
   })
+end)
+
+-- Command to change UI colors in-game
+RegisterCommand('bldr_setcolor', function(source, args, rawCommand)
+  if #args < 2 then
+    print("^3[BLDR-DRUGS] Usage: /bldr_setcolor <property> <color>^7")
+    print("^3Properties:^7 primary, secondary, background, backgroundAlt, text, textMuted, success, warning, error")
+    print("^3Example:^7 /bldr_setcolor primary #ff0000")
+    return
+  end
+  
+  local property = args[1]:lower()
+  local color = args[2]
+  
+  -- Validate property
+  local validProperties = {
+    'primary', 'secondary', 'background', 'backgroundAlt', 
+    'text', 'textMuted', 'success', 'warning', 'error'
+  }
+  
+  local isValid = false
+  for _, prop in ipairs(validProperties) do
+    if prop == property then
+      isValid = true
+      break
+    end
+  end
+  
+  if not isValid then
+    print("^1[BLDR-DRUGS] Invalid property. Valid options: primary, secondary, background, backgroundAlt, text, textMuted, success, warning, error^7")
+    return
+  end
+  
+  -- Update config
+  if not Config.UI then Config.UI = { colors = {} } end
+  if not Config.UI.colors then Config.UI.colors = {} end
+  
+  Config.UI.colors[property] = color
+  
+  print(("^2[BLDR-DRUGS] UI color updated: %s = %s^7"):format(property, color))
+  print("^3Open the UI to see changes. Use /bldr_savecolors to save permanently.^7")
+end)
+
+-- Command to set gradients
+RegisterCommand('bldr_setgradient', function(source, args, rawCommand)
+  if #args < 2 then
+    print("^3[BLDR-DRUGS] Usage: /bldr_setgradient <type> <gradient>^7")
+    print("^3Types:^7 panel, header, xpBar")
+    print("^3Example:^7 /bldr_setgradient panel linear-gradient(145deg, #1a1a2e, #16213e)")
+    return
+  end
+  
+  local gradientType = args[1]:lower()
+  local gradient = table.concat(args, " ", 2)
+  
+  -- Validate type
+  if gradientType ~= 'panel' and gradientType ~= 'header' and gradientType ~= 'xpbar' then
+    print("^1[BLDR-DRUGS] Invalid gradient type. Valid options: panel, header, xpBar^7")
+    return
+  end
+  
+  -- Update config
+  if not Config.UI then Config.UI = { gradients = {} } end
+  if not Config.UI.gradients then Config.UI.gradients = {} end
+  
+  Config.UI.gradients[gradientType] = gradient
+  
+  print(("^2[BLDR-DRUGS] Gradient updated: %s^7"):format(gradientType))
+  print("^3Open the UI to see changes. Use /bldr_savecolors to save permanently.^7")
+end)
+
+-- Command to preview current colors
+RegisterCommand('bldr_showcolors', function()
+  print("^3=== Current BLDR-DRUGS UI Colors ===^7")
+  if Config.UI and Config.UI.colors then
+    for prop, color in pairs(Config.UI.colors) do
+      print(("^2%s^7 = ^6%s^7"):format(prop, color))
+    end
+  else
+    print("^1No custom colors set^7")
+  end
+  
+  if Config.UI and Config.UI.gradients then
+    print("^3=== Gradients ===^7")
+    for prop, gradient in pairs(Config.UI.gradients) do
+      print(("^2%s^7 = ^6%s^7"):format(prop, gradient))
+    end
+  end
+end)
+
+-- Command to reset to default colors
+RegisterCommand('bldr_resetcolors', function()
+  Config.UI = {
+    colors = {
+      primary = '#00ff88',
+      secondary = '#0f3460',
+      background = 'rgba(26, 26, 46, 0.85)',
+      backgroundAlt = 'rgba(22, 33, 62, 0.85)',
+      text = '#ffffff',
+      textMuted = '#cccccc',
+      success = '#00ff88',
+      warning = '#ffd700',
+      error = '#ff4444'
+    },
+    gradients = {
+      panel = 'linear-gradient(145deg, rgba(26, 26, 46, 0.85), rgba(22, 33, 62, 0.85))',
+      header = 'linear-gradient(90deg, #0f3460, #16213e)',
+      xpBar = 'linear-gradient(90deg, #00ff88, #00cc6a)'
+    }
+  }
+  print("^2[BLDR-DRUGS] Colors reset to default. Open UI to see changes.^7")
+end)
+
+-- Command to save colors permanently (prints instructions)
+RegisterCommand('bldr_savecolors', function()
+  print("^3=== Save Colors to Config ===^7")
+  print("^1WARNING: This will print code to paste into your config.lua file^7")
+  print("")
+  print("^6Copy and paste this into your bldr-drugs/config.lua file:^7")
+  print("")
+  print("Config.UI = {")
+  print("  colors = {")
+  
+  if Config.UI and Config.UI.colors then
+    for prop, color in pairs(Config.UI.colors) do
+      print(("    %s = '%s',"):format(prop, color))
+    end
+  end
+  
+  print("  },")
+  print("  gradients = {")
+  
+  if Config.UI and Config.UI.gradients then
+    for prop, gradient in pairs(Config.UI.gradients) do
+      print(("    %s = '%s',"):format(prop, gradient))
+    end
+  end
+  
+  print("  }")
+  print("}")
+  print("")
+  print("^3Then restart the resource: ^2/restart bldr-drugs^7")
 end)
 
 -- Main interaction thread (modified for third-eye compatibility)
@@ -1052,7 +1244,7 @@ RegisterCommand('checknpc', function()
     print('[bldr-drugs] NPC Model Hash:', model)
     print('[bldr-drugs] NPC Model Name (for config):', modelName)
   else
-    CustomNotify('No NPC found nearby', 'error', 3000)
+    CustomNotify('No NPC found nearby', 'error')
   end
 end, false)
 

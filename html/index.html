@@ -10,7 +10,10 @@
   <div id="app" class="hidden">
     <div class="panel">
       <div class="header">
-        <h2>🏪 Drug Dealing</h2>
+        <div class="header-top">
+          <h2>🏪 Drug Dealing</h2>
+          <button id="themeBtn" class="theme-btn" title="Customize Colors">🎨</button>
+        </div>
         <div class="player-info">
           <div class="level-info">
             <span id="playerLevel">Level 0</span>
@@ -59,6 +62,73 @@
         </div>
         
         <div id="status" class="status"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Color Theme Customizer Modal -->
+  <div id="themeModal" class="theme-modal hidden">
+    <div class="theme-modal-content">
+      <div class="theme-modal-header">
+        <h3>🎨 Customize UI Colors</h3>
+        <button id="closeThemeBtn" class="close-theme-btn">×</button>
+      </div>
+      
+      <div class="theme-modal-body">
+        <div class="theme-section">
+          <h4>Main Colors</h4>
+          <div class="color-input-group">
+            <label for="colorPrimary">Primary (Borders, Highlights)</label>
+            <input type="color" id="colorPrimary" class="color-input" value="#00ff88">
+            <input type="text" id="colorPrimaryText" class="color-text" value="#00ff88">
+          </div>
+          <div class="color-input-group">
+            <label for="colorSuccess">Success (XP Bar, Level)</label>
+            <input type="color" id="colorSuccess" class="color-input" value="#00ff88">
+            <input type="text" id="colorSuccessText" class="color-text" value="#00ff88">
+          </div>
+          <div class="color-input-group">
+            <label for="colorWarning">Warning (Title)</label>
+            <input type="color" id="colorWarning" class="color-input" value="#ffd700">
+            <input type="text" id="colorWarningText" class="color-text" value="#ffd700">
+          </div>
+          <div class="color-input-group">
+            <label for="colorError">Error</label>
+            <input type="color" id="colorError" class="color-input" value="#ff4444">
+            <input type="text" id="colorErrorText" class="color-text" value="#ff4444">
+          </div>
+        </div>
+
+        <div class="theme-section">
+          <h4>Text Colors</h4>
+          <div class="color-input-group">
+            <label for="colorText">Primary Text</label>
+            <input type="color" id="colorText" class="color-input" value="#ffffff">
+            <input type="text" id="colorTextText" class="color-text" value="#ffffff">
+          </div>
+          <div class="color-input-group">
+            <label for="colorTextMuted">Muted Text</label>
+            <input type="color" id="colorTextMuted" class="color-input" value="#cccccc">
+            <input type="text" id="colorTextMutedText" class="color-text" value="#cccccc">
+          </div>
+        </div>
+
+        <div class="theme-section">
+          <h4>Quick Themes</h4>
+          <div class="theme-presets">
+            <button class="preset-btn" data-preset="default">🟢 Default (Green)</button>
+            <button class="preset-btn" data-preset="blue">🔵 Blue</button>
+            <button class="preset-btn" data-preset="purple">🟣 Purple</button>
+            <button class="preset-btn" data-preset="red">🔴 Red</button>
+            <button class="preset-btn" data-preset="gold">🟡 Gold</button>
+            <button class="preset-btn" data-preset="cyan">🔷 Cyan</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="theme-modal-footer">
+        <button id="resetThemeBtn" class="theme-btn-secondary">Reset to Default</button>
+        <button id="applyThemeBtn" class="theme-btn-primary">Apply & Save</button>
       </div>
     </div>
   </div>

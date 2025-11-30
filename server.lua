@@ -779,7 +779,7 @@ QBCore.Commands.Add('testevocraft', 'Test evolution crafting (admin)', {
   
   -- Trigger the crafting event for the target player
   TriggerClientEvent('bldr-drugs:triggerCraft', playerId, recipeKey)
-  TriggerClientEvent('QBCore:Notify', source, string.format('Triggered crafting: %s for player %s', recipeKey, Player.PlayerData.charinfo.firstname), 'success')
+  TriggerClientEvent('QBCore:Notify', source, string.format('Triggered crafting: %s for player %s (items will now have purity metadata)', recipeKey, Player.PlayerData.charinfo.firstname), 'success')
 end, 'admin')
 
 -- Debug command to check what's actually unlocked in database
@@ -1307,11 +1307,11 @@ RegisterNetEvent('bldr-drugs:craftEvolution', function(recipe_key)
         return Player.Functions.RemoveItem(item, count)
       end
     end
-    local function addItem(item, count)
+    local function addItem(item, count, info)
       if GetResourceState('ox_inventory') == 'started' then
-        return exports.ox_inventory:AddItem(src, item, count)
+        return exports.ox_inventory:AddItem(src, item, count, info)
       else
-        return Player.Functions.AddItem(item, count)
+        return Player.Functions.AddItem(item, count, nil, info)
       end
     end
 
@@ -1322,8 +1322,20 @@ RegisterNetEvent('bldr-drugs:craftEvolution', function(recipe_key)
       end
     end
     for _, req in ipairs(rec.requires or {}) do removeItem(req.item, req.count or 1) end
-    addItem(rec.result.item, rec.result.count or 1)
-    evoNotify(src, ('Crafted %s!'):format(rec.label or recipe_key), 'success')
+    
+    -- Generate purity for the evolved drug
+    local itemConfig = Config.Items[rec.result.item]
+    local purity = generatePurity(rec.result.item, nil)
+    local purityLevel, purityData = getPurityLevel(purity)
+    
+    -- Create item info with purity metadata (minimal for clean display)
+    local itemInfo = {
+      _purity = purity, -- Hidden field for gameplay mechanics (underscore prefix)
+      description = (itemConfig and itemConfig.description or "") .. " | " .. purityData.label
+    }
+    
+    addItem(rec.result.item, rec.result.count or 1, itemInfo)
+    evoNotify(src, ('Crafted %s with %s quality!'):format(rec.label or recipe_key, purityData.label), 'success')
   end)
 end)
 

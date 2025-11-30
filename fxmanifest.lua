@@ -1,7 +1,7 @@
 fx_version 'cerulean'
 game 'gta5'
 
-author 'BLDR Team'
+author 'blakethepet'
 description 'bldr-drugs - Advanced Drug Dealing System with Evolution & XP Progression'
 version '2.7.0'
 

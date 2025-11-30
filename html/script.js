@@ -8,6 +8,36 @@ let currentPlayerData = {
 };
 let selectedItem = null;
 
+// Apply custom UI colors from config
+function applyCustomColors(colors) {
+  if (!colors) return;
+  
+  const root = document.documentElement;
+  if (colors.primary) root.style.setProperty('--color-primary', colors.primary);
+  if (colors.secondary) root.style.setProperty('--color-secondary', colors.secondary);
+  if (colors.background) root.style.setProperty('--color-background', colors.background);
+  if (colors.backgroundAlt) root.style.setProperty('--color-background-alt', colors.backgroundAlt);
+  if (colors.text) root.style.setProperty('--color-text', colors.text);
+  if (colors.textMuted) root.style.setProperty('--color-text-muted', colors.textMuted);
+  if (colors.success) root.style.setProperty('--color-success', colors.success);
+  if (colors.warning) root.style.setProperty('--color-warning', colors.warning);
+  if (colors.error) root.style.setProperty('--color-error', colors.error);
+  
+  console.log('Applied custom UI colors:', colors);
+}
+
+// Apply custom gradients
+function applyCustomGradients(gradients) {
+  if (!gradients) return;
+  
+  const root = document.documentElement;
+  if (gradients.panel) root.style.setProperty('--gradient-panel', gradients.panel);
+  if (gradients.header) root.style.setProperty('--gradient-header', gradients.header);
+  if (gradients.xpBar) root.style.setProperty('--gradient-xp', gradients.xpBar);
+  
+  console.log('Applied custom gradients:', gradients);
+}
+
 // Get the correct resource name for NUI communication
 function getResourceName() {
   // Remove the cfx-nui- prefix if it exists
@@ -199,6 +229,14 @@ window.addEventListener('message', (event) => {
     console.log('UI opened, adding mouse event debugging');
     document.getElementById('app').classList.remove('hidden');
     resetAutoCloseTimer(); // Start auto-close timer
+    
+    // Apply custom colors if provided
+    if (data.colors) {
+      applyCustomColors(data.colors);
+    }
+    if (data.gradients) {
+      applyCustomGradients(data.gradients);
+    }
     
     // Add debugging for mouse interaction
     document.addEventListener('click', function(e) {
@@ -481,9 +519,216 @@ document.getElementById('sellBtn').addEventListener('click', () => {
 // POST handlers for NUI communication
 window.addEventListener('DOMContentLoaded', () => {
   fetch(`https://${getResourceName()}/ready`, { method: 'POST' });
+  initializeThemeModal();
 });
 
 // Utility function for resource name
 function GetParentResourceName() {
   return window.location.hostname || 'bldr-drugs';
+}
+
+// Theme Modal Functionality
+function initializeThemeModal() {
+  const themeBtn = document.getElementById('themeBtn');
+  const themeModal = document.getElementById('themeModal');
+  const closeThemeBtn = document.getElementById('closeThemeBtn');
+  const applyThemeBtn = document.getElementById('applyThemeBtn');
+  const resetThemeBtn = document.getElementById('resetThemeBtn');
+  
+  // Color input elements
+  const colorInputs = {
+    primary: document.getElementById('colorPrimary'),
+    success: document.getElementById('colorSuccess'),
+    warning: document.getElementById('colorWarning'),
+    error: document.getElementById('colorError'),
+    text: document.getElementById('colorText'),
+    textMuted: document.getElementById('colorTextMuted')
+  };
+  
+  const textInputs = {
+    primary: document.getElementById('colorPrimaryText'),
+    success: document.getElementById('colorSuccessText'),
+    warning: document.getElementById('colorWarningText'),
+    error: document.getElementById('colorErrorText'),
+    text: document.getElementById('colorTextText'),
+    textMuted: document.getElementById('colorTextMutedText')
+  };
+  
+  // Preset themes
+  const presets = {
+    default: {
+      primary: '#00ff88',
+      success: '#00ff88',
+      warning: '#ffaa00',
+      error: '#ff4444',
+      text: '#ffffff',
+      textMuted: '#a0a0a0'
+    },
+    blue: {
+      primary: '#00aaff',
+      success: '#00ff88',
+      warning: '#ffaa00',
+      error: '#ff4444',
+      text: '#ffffff',
+      textMuted: '#a0a0a0'
+    },
+    purple: {
+      primary: '#aa00ff',
+      success: '#00ff88',
+      warning: '#ffaa00',
+      error: '#ff4444',
+      text: '#ffffff',
+      textMuted: '#a0a0a0'
+    },
+    red: {
+      primary: '#ff0044',
+      success: '#00ff88',
+      warning: '#ffaa00',
+      error: '#ff4444',
+      text: '#ffffff',
+      textMuted: '#a0a0a0'
+    },
+    gold: {
+      primary: '#ffaa00',
+      success: '#00ff88',
+      warning: '#ffaa00',
+      error: '#ff4444',
+      text: '#ffffff',
+      textMuted: '#a0a0a0'
+    },
+    cyan: {
+      primary: '#00ffff',
+      success: '#00ff88',
+      warning: '#ffaa00',
+      error: '#ff4444',
+      text: '#ffffff',
+      textMuted: '#a0a0a0'
+    }
+  };
+  
+  // Get current colors from CSS variables
+  function getCurrentColors() {
+    const root = document.documentElement;
+    const computedStyle = getComputedStyle(root);
+    return {
+      primary: computedStyle.getPropertyValue('--color-primary').trim(),
+      success: computedStyle.getPropertyValue('--color-success').trim(),
+      warning: computedStyle.getPropertyValue('--color-warning').trim(),
+      error: computedStyle.getPropertyValue('--color-error').trim(),
+      text: computedStyle.getPropertyValue('--color-text').trim(),
+      textMuted: computedStyle.getPropertyValue('--color-text-muted').trim()
+    };
+  }
+  
+  // Load current colors into inputs
+  function loadCurrentColors() {
+    const colors = getCurrentColors();
+    Object.keys(colors).forEach(key => {
+      if (colorInputs[key]) {
+        colorInputs[key].value = colors[key];
+        if (textInputs[key]) {
+          textInputs[key].value = colors[key].toUpperCase();
+        }
+      }
+    });
+  }
+  
+  // Sync color picker with text input
+  Object.keys(colorInputs).forEach(key => {
+    colorInputs[key].addEventListener('input', (e) => {
+      const value = e.target.value;
+      textInputs[key].value = value.toUpperCase();
+      applyColorPreview(key, value);
+    });
+    
+    textInputs[key].addEventListener('input', (e) => {
+      let value = e.target.value;
+      if (!value.startsWith('#')) value = '#' + value;
+      if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+        colorInputs[key].value = value;
+        applyColorPreview(key, value);
+      }
+    });
+  });
+  
+  // Apply color preview in real-time
+  function applyColorPreview(key, value) {
+    const root = document.documentElement;
+    root.style.setProperty(`--color-${key === 'textMuted' ? 'text-muted' : key}`, value);
+  }
+  
+  // Open modal
+  themeBtn.addEventListener('click', () => {
+    themeModal.classList.remove('hidden');
+    loadCurrentColors();
+  });
+  
+  // Close modal
+  closeThemeBtn.addEventListener('click', () => {
+    themeModal.classList.add('hidden');
+  });
+  
+  // Close modal when clicking outside
+  themeModal.addEventListener('click', (e) => {
+    if (e.target === themeModal) {
+      themeModal.classList.add('hidden');
+    }
+  });
+  
+  // Apply preset theme
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const presetName = btn.dataset.preset;
+      const preset = presets[presetName];
+      if (preset) {
+        Object.keys(preset).forEach(key => {
+          if (colorInputs[key]) {
+            colorInputs[key].value = preset[key];
+            textInputs[key].value = preset[key].toUpperCase();
+            applyColorPreview(key, preset[key]);
+          }
+        });
+      }
+    });
+  });
+  
+  // Reset to default colors
+  resetThemeBtn.addEventListener('click', () => {
+    const defaultColors = presets.default;
+    Object.keys(defaultColors).forEach(key => {
+      if (colorInputs[key]) {
+        colorInputs[key].value = defaultColors[key];
+        textInputs[key].value = defaultColors[key].toUpperCase();
+        applyColorPreview(key, defaultColors[key]);
+      }
+    });
+  });
+  
+  // Apply and save colors
+  applyThemeBtn.addEventListener('click', () => {
+    const colors = {
+      primary: colorInputs.primary.value,
+      success: colorInputs.success.value,
+      warning: colorInputs.warning.value,
+      error: colorInputs.error.value,
+      text: colorInputs.text.value,
+      textMuted: colorInputs.textMuted.value
+    };
+    
+    // Send to Lua backend to save
+    fetch(`https://${getResourceName()}/saveColors`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ colors: colors })
+    }).then(resp => resp.json()).then(data => {
+      if (data.success) {
+        console.log('Colors saved successfully');
+        themeModal.classList.add('hidden');
+      } else {
+        console.error('Failed to save colors:', data.message);
+      }
+    }).catch(err => {
+      console.error('Error saving colors:', err);
+    });
+  });
 }
