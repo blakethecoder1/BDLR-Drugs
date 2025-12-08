@@ -11,6 +11,8 @@
 
 ---
 
+NEED SUPPORT? https://discord.gg/VUftnH4w
+
 ## 📋 **Changelog - v2.8 UI Customization Update**
 
 ### 🎨 **Major Features Added**
