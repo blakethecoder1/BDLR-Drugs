@@ -1,50 +1,69 @@
-# 🌿 BLDR-Drugs v2.8 - Advanced Drug Dealing System
+# 🌿 BLDR-Drugs v2.9 - Advanced Drug Dealing System
 **Next-Generation Drug Dealing for QBCore FiveM Servers**
 
 > **Author:** blakethepet | **Framework:** QBCore | **Status:** Production Ready
 
 ![FiveM](https://img.shields.io/badge/FiveM-QBCore-green)
 ![License](https://img.shields.io/badge/License-Custom%20Commercial-red)
-![Version](https://img.shields.io/badge/Version-2.8-brightgreen)
+![Version](https://img.shields.io/badge/Version-2.9-brightgreen)
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-success)
 ![Author](https://img.shields.io/badge/Author-blakethepet-blue)
 
 ---
 
-NEED SUPPORT? https://discord.gg/VUftnH4w
+## 📋 **Changelog - v2.9 Smart Robbery Update**
 
-## 📋 **Changelog - v2.8 UI Customization Update**
+### 🎭 **NEW: Realistic Robbery System**
+- **Non-Violent Robberies**: Robbers steal and flee instead of attacking by default
+- **Conditional Combat**: Robbers only fight back if you attack them first
+- **Theft Animation**: Realistic "stick-up" behavior with approach and flee mechanics
+- **Cash Theft**: Robbers steal a percentage of your cash during deals
+- **Item Theft**: Can steal the drugs you were trying to sell
+- **Police Dispatch**: Automatic alerts to police when robbery occurs
+- **Configurable Behavior**: Choose between passive or aggressive robber AI
+- **Smart Despawning**: Robbers flee and despawn after successful theft
 
-### 🎨 **Major Features Added**
+### ⚙️ **Robbery Configuration Options**
+- `Config.Robbery.enabled` - Master toggle for robbery system
+- `Config.Robbery.chance` - Percentage chance per sale (default 15%)
+- `Config.Robbery.attackPlayer` - If false, robbers just steal and run
+- `Config.Robbery.fightBackIfAttacked` - Robbers defend themselves if attacked
+- `Config.Robbery.canStealCash` - Allow cash theft
+- `Config.Robbery.canStealItems` - Allow item theft
+- `Config.Robbery.maxCashStolen` - Min/max/percent cash theft amounts
+- `Config.Robbery.dispatchEnabled` - Send police alerts
+- `Config.Robbery.robberModels` - 10 gang member models
+- `Config.Robbery.weapons` - 5 weapon types (or unarmed)
+- `Config.Robbery.theftAnimTime` - Time robber spends stealing (2 seconds)
+
+### 🎨 **v2.8 UI Customization Features**
 - **In-UI Color Customizer**: Change UI colors directly from the interface with live preview
 - **Real-Time Theme Preview**: See color changes instantly as you adjust them
 - **6 Preset Themes**: Quick-apply themes (Default Green, Blue, Purple, Red, Gold, Cyan)
 - **Individual Color Controls**: Customize primary, success, warning, error, text, and muted text colors
-- **Hex Color Inputs**: Use visual pickers or type hex codes directly
-- **Theme Persistence**: Color choices saved and applied automatically
-
-### 🔧 **Technical Improvements**
-- **CSS Variable System**: Dynamic color theming without config edits or restarts
-- **NUI Color API**: Seamless communication between UI and Lua for color saving
 - **Command-Based Controls**: `/bldr_setcolor`, `/bldr_setgradient`, `/bldr_showcolors`, `/bldr_resetcolors`, `/bldr_savecolors`
-- **Config-Based Defaults**: `Config.UI.colors` and `Config.UI.gradients` for server-wide defaults
 
 ### ❌ **Removed Systems**
 - **Purity System Completely Removed**: All purity mechanics, quality checks, and rejection systems have been removed for streamlined gameplay
-- **Config.Purity Removed**: No longer needed in configuration
-- **Simplified Price Calculation**: Prices now based purely on base value and level multipliers
-- **Evolution System Preserved**: Drug evolution and progression mechanics remain fully functional
-
-### 🎨 **UI/UX Enhancements**
-- **Theme Button (🎨)**: Prominent theme customizer button in UI header
-- **Color Modal**: Beautiful modal with organized color controls and presets
-- **Synchronized Inputs**: Color pickers and hex text inputs stay in sync
-- **Reset Option**: Quickly restore default theme with one click
-- **Responsive Design**: Modal works perfectly on all screen resolutions
 
 ---
 
 ## �🚀 **What Makes This Amazing**
+
+### 🎭 **Realistic Robbery System** (NEW in v2.9)
+- **Smart Robber AI**: NPCs approach, steal items/cash, then flee realistically
+- **Non-Violent by Default**: Robbers don't attack unless you shoot first
+- **Defensive Combat**: Attack a robber and they'll fight back to defend themselves
+- **Theft Mechanics**: 
+  - Steal 10-50% of your carried cash (configurable)
+  - Can steal the drugs you were trying to sell
+  - Realistic "stick-up" animation and behavior
+- **Police Integration**: Automatic dispatch alerts when robberies occur
+- **Configurable Risk**: Set robbery chance per sale (default 15%)
+- **10 Robber Models**: Gang members from various factions
+- **Multiple Weapons**: Pistols, SMGs, or unarmed robbers
+- **Smart Despawning**: Robbers flee and cleanup after successful theft
+- **Behavior Modes**: Choose between passive theft or aggressive attack behavior
 
 ### 🎯 **Dual Interaction System**
 - **Traditional NPC Approach**: Walk up to randomly spawning NPCs for classic drug dealing

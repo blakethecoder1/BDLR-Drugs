@@ -30,6 +30,75 @@ Config.Money = {
   -- type = 'bank',         -- Bank money (clean)
 }
 
+-- [NEW] Robbery System Configuration
+Config.Robbery = {
+  enabled = true,           -- Enable robbery system
+  chance = 15,              -- Percent chance of robbery instead of normal sale (0-100)
+  
+  -- Robber NPC Configuration
+  robberModels = {
+    'g_m_y_mexgoon_01',     -- Mexican gang member
+    'g_m_y_mexgoon_02',     -- Mexican gang member 2
+    'g_m_y_mexgoon_03',     -- Mexican gang member 3
+    'g_m_y_lost_01',        -- Lost MC member
+    'g_m_y_lost_02',        -- Lost MC member 2
+    'g_m_y_lost_03',        -- Lost MC member 3
+    'g_m_y_ballaeast_01',   -- Balla gang member
+    'g_m_y_ballasout_01',   -- Balla gang member 2
+    'g_m_y_famca_01',       -- Families gang member
+    'g_m_y_famdnf_01',      -- Families gang member 2
+  },
+  
+  weapons = {               -- Random weapon for robber (nil = fists only)
+    'WEAPON_PISTOL',
+    'WEAPON_COMBATPISTOL',
+    'WEAPON_KNIFE',
+    'WEAPON_BAT',
+    nil,                    -- Sometimes unarmed
+  },
+  
+  -- What can be stolen
+  canStealCash = true,      -- Robber can steal player's cash
+  canStealItems = true,     -- Robber can steal the items you were trying to sell
+  maxCashStolen = {         -- Range of cash that can be stolen
+    min = 100,
+    max = 500,
+    percent = 30,           -- Or steal up to 30% of player's cash (whichever is less)
+  },
+  
+  -- Behavior & Timing
+  robberHealth = 200,       -- Robber NPC health
+  robberArmor = 50,         -- Robber NPC armor
+  despawnDelay = 30000,     -- Delete robber after 30 seconds if far from player (ms)
+  attackPlayer = false,     -- If false, robber just steals and runs (won't attack unless attacked)
+  fightBackIfAttacked = true, -- If true, robber will fight back if player attacks them
+  fleeChance = 40,          -- Percent chance robber flees instead of fighting to death (when in combat)
+  fleeHealthPercent = 30,   -- Robber flees when health drops below this percent
+  theftAnimTime = 2000,     -- Time robber spends "stealing" before fleeing (ms)
+  
+  -- Police Dispatch
+  dispatchEnabled = true,   -- Send police alert when robbery occurs
+  dispatchCooldown = 60000, -- Minimum time between dispatch alerts (ms)
+  dispatchCode = '10-31',   -- Police code for robbery in progress
+  dispatchMessage = 'Drug deal robbery in progress',
+  
+  -- Notifications
+  notifications = {
+    robberSpawned = 'You\'re being robbed!',
+    robberApproaching = 'The robber is approaching...',
+    cashStolen = 'The robber took $%s from you!',
+    itemsStolen = 'The robber took your %s!',
+    robberFleeing = 'The robber is fleeing!',
+    robberDead = 'You killed the robber!',
+    robberRetaliate = 'The robber is fighting back!',
+  },
+  
+  -- Advanced Options
+  minDistanceFromPolice = 0.0,  -- Minimum distance from police for robbery to occur (0 = no restriction)
+  robberyInSafeZones = false,   -- Allow robberies in safe zones (blacklisted areas)
+  cancelSaleOnRobbery = true,   -- If true, sale is canceled. If false, sale proceeds but you get robbed too
+}
+
 -- Police detection radius (units)
 Config.PoliceRadius = 200.0
 
@@ -180,7 +249,7 @@ Config.Items = {
     description = 'Party pills for the night'
   },
 
-  -- EVOLVED DRUGS (Higher tier, better prices) - Premium purity by default
+  -- EVOLVED DRUGS (Higher tier, better prices)
   ['evo_weed_chronic'] = {
     label = 'Chronic Kush',
     basePrice = 85,           -- 70% more than regular weed

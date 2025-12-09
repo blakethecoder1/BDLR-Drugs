@@ -347,6 +347,49 @@ AddEventHandler(Config.ResourceName..':requestPlayerStats', function()
   end)
 end)
 
+-- [NEW] Robbery dispatch system
+local lastDispatchTime = 0
+RegisterServerEvent(Config.ResourceName..':server:robberyDispatch')
+AddEventHandler(Config.ResourceName..':server:robberyDispatch', function(source, coords)
+  local currentTime = GetGameTimer()
+  
+  -- Check dispatch cooldown
+  if currentTime - lastDispatchTime < Config.Robbery.dispatchCooldown then
+    debugPrint('general', 'Robbery dispatch on cooldown, skipping')
+    return
+  end
+  
+  lastDispatchTime = currentTime
+  
+  -- Send dispatch to all police players
+  local players = QBCore.Functions.GetQBPlayers()
+  for playerId, PolicePlayer in pairs(players) do
+    if PolicePlayer and PolicePlayer.PlayerData and PolicePlayer.PlayerData.job and PolicePlayer.PlayerData.job.name == 'police' then
+      -- Use your server's dispatch system - examples below:
+      
+      -- Example 1: cd_dispatch
+      -- exports['cd_dispatch']:GetPlayerInfo(playerId)
+      -- exports['cd_dispatch']:AddNotification({
+      --   job_table = {'police'},
+      --   coords = coords,
+      --   title = Config.Robbery.dispatchCode .. ' - ' .. Config.Robbery.dispatchMessage,
+      --   message = 'Robbery in progress at drug deal',
+      --   flash = 0,
+      --   unique_id = tostring(math.random(0000000,9999999)),
+      --   blip = {sprite = 458, scale = 1.0, colour = 1, flashes = false, text = 'Robbery', time = (5*60*1000), sound = 1}
+      -- })
+      
+      -- Example 2: ps-dispatch
+      -- exports['ps-dispatch']:DrugSale(coords)
+      
+      -- Example 3: Simple notification (fallback)
+      TriggerClientEvent('QBCore:Notify', playerId, Config.Robbery.dispatchCode .. ': ' .. Config.Robbery.dispatchMessage, 'error', 10000)
+      
+      debugPrint('general', 'Robbery dispatch sent to police player', playerId)
+    end
+  end
+end)
+
 -- Enhanced sell completion
 QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(source, cb, data)
   local src = source
@@ -449,7 +492,61 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
   
   debugPrint('sales', 'Sale attempt:', 'item=', itemName, 'amount=', amount, 'chance=', successChance, 'roll=', rand, 'success=', success)
   
-  if success then
+  -- [NEW] Robbery chance system start
+  local robberyTriggered = false
+  if Config.Robbery.enabled and success then
+    local robberyRoll = math.random(1, 100)
+    if robberyRoll <= Config.Robbery.chance then
+      robberyTriggered = true
+      debugPrint('sales', 'ROBBERY TRIGGERED for player', src, 'roll=', robberyRoll, 'chance=', Config.Robbery.chance)
+      
+      -- Trigger client-side robbery sequence
+      TriggerClientEvent(Config.ResourceName..':startRobbery', src, {
+        coords = coords,
+        playerPed = GetPlayerPed(src)
+      })
+      
+      -- Handle stolen cash (server-side)
+      if Config.Robbery.canStealCash then
+        local playerCash = Player.Functions.GetMoney('cash')
+        local maxSteal = math.min(
+          Config.Robbery.maxCashStolen.max,
+          math.floor(playerCash * (Config.Robbery.maxCashStolen.percent / 100))
+        )
+        local stolenCash = math.random(Config.Robbery.maxCashStolen.min, math.max(Config.Robbery.maxCashStolen.min, maxSteal))
+        
+        if playerCash >= stolenCash then
+          Player.Functions.RemoveMoney('cash', stolenCash, "robbed-during-deal")
+          debugPrint('sales', 'Robber stole', stolenCash, 'cash from player', src)
+          
+          -- Notify player about cash loss
+          TriggerClientEvent(Config.ResourceName..':robberyStoleCash', src, stolenCash)
+        end
+      end
+      
+      -- Handle stolen items (server-side)
+      if Config.Robbery.canStealItems then
+        -- Items are already being sold, so we just don't give them back if sale is canceled
+        debugPrint('sales', 'Robber attempting to steal items:', itemName, 'x', amount)
+        TriggerClientEvent(Config.ResourceName..':robberyStoleItems', src, itemName, amount)
+      end
+      
+      -- Send police dispatch if enabled
+      if Config.Robbery.dispatchEnabled then
+        TriggerEvent(Config.ResourceName..':server:robberyDispatch', src, coords)
+      end
+      
+      -- If configured to cancel sale on robbery, mark as failed
+      if Config.Robbery.cancelSaleOnRobbery then
+        success = false
+        reasonFail = 'robbed'
+        debugPrint('sales', 'Sale canceled due to robbery for player', src)
+      end
+    end
+  end
+  -- [NEW] Robbery chance system end
+  
+  if success and not robberyTriggered then
     -- Remove items and give money
     debugPrint('sales', 'Attempting to remove item:', 'item=', itemName, 'amount=', amount, 'player=', src)
     local removed = Player.Functions.RemoveItem(itemName, amount, nil, "drug-sale")

@@ -785,6 +785,211 @@ AddEventHandler(Config.ResourceName..':updatePlayerStats', function(xp)
   end
 end)
 
+-- [NEW] Robbery System - Client Events
+local activeRobber = nil
+local robberActive = false
+
+RegisterNetEvent(Config.ResourceName..':startRobbery')
+AddEventHandler(Config.ResourceName..':startRobbery', function(data)
+  if robberActive then return end -- Prevent multiple robbers
+  
+  robberActive = true
+  debugPrint("Starting robbery sequence...")
+  
+  -- Show initial notification
+  CustomNotify(Config.Robbery.notifications.robberSpawned, 'error', 5000)
+  
+  -- Spawn robber NPC
+  Citizen.CreateThread(function()
+    local playerPed = PlayerPedId()
+    local playerCoords = GetEntityCoords(playerPed)
+    local playerHeading = GetEntityHeading(playerPed)
+    
+    -- Spawn slightly behind/to the side of player
+    local spawnOffset = vector3(
+      math.random(-3, 3),
+      math.random(-5, -3), -- Behind player
+      0.0
+    )
+    local spawnCoords = playerCoords + spawnOffset
+    
+    -- Get random robber model
+    local modelName = Config.Robbery.robberModels[math.random(#Config.Robbery.robberModels)]
+    local modelHash = GetHashKey(modelName)
+    
+    -- Load model
+    RequestModel(modelHash)
+    while not HasModelLoaded(modelHash) do
+      Wait(100)
+    end
+    
+    -- Create robber ped
+    activeRobber = CreatePed(4, modelHash, spawnCoords.x, spawnCoords.y, spawnCoords.z, playerHeading, true, false)
+    SetEntityAsMissionEntity(activeRobber, true, true)
+    SetPedFleeAttributes(activeRobber, 0, false)
+    SetPedCombatAttributes(activeRobber, 46, true) -- Always fight
+    SetPedCombatAbility(activeRobber, 100)
+    SetPedCombatRange(activeRobber, 2) -- Stay close
+    
+    -- Set health and armor
+    SetEntityHealth(activeRobber, Config.Robbery.robberHealth)
+    SetPedArmour(activeRobber, Config.Robbery.robberArmor)
+    
+    -- Give weapon if configured
+    local weaponHash = nil
+    if Config.Robbery.weapons and #Config.Robbery.weapons > 0 then
+      local weaponName = Config.Robbery.weapons[math.random(#Config.Robbery.weapons)]
+      if weaponName then
+        weaponHash = GetHashKey(weaponName)
+        GiveWeaponToPed(activeRobber, weaponHash, 250, false, true)
+        SetCurrentPedWeapon(activeRobber, weaponHash, true)
+      end
+    end
+    
+    -- Robber behavior based on config
+    if Config.Robbery.attackPlayer then
+      -- Old aggressive behavior: attack immediately
+      TaskGoToEntity(activeRobber, playerPed, -1, 1.5, 3.0, 1073741824, 0)
+      Wait(1500)
+      
+      if DoesEntityExist(activeRobber) then
+        TaskCombatPed(activeRobber, playerPed, 0, 16)
+        SetPedKeepTask(activeRobber, true)
+      end
+      debugPrint("Robber spawned and attacking player")
+    else
+      -- New non-violent behavior: approach, "steal", then flee
+      TaskGoToEntity(activeRobber, playerPed, -1, 2.0, 2.0, 1073741824, 0)
+      debugPrint("Robber approaching to steal items...")
+      
+      -- Wait for robber to reach player
+      local reachedPlayer = false
+      local timeout = GetGameTimer() + 5000
+      while DoesEntityExist(activeRobber) and not reachedPlayer and GetGameTimer() < timeout do
+        local robberCoords = GetEntityCoords(activeRobber)
+        local playerCoords = GetEntityCoords(playerPed)
+        local distance = #(robberCoords - playerCoords)
+        
+        if distance < 3.0 then
+          reachedPlayer = true
+        end
+        Wait(100)
+      end
+      
+      if DoesEntityExist(activeRobber) and reachedPlayer then
+        -- Play theft animation
+        ClearPedTasksImmediately(activeRobber)
+        TaskTurnPedToFaceEntity(activeRobber, playerPed, Config.Robbery.theftAnimTime or 2000)
+        
+        -- Play animation if available
+        if HasAnimDictLoaded("mp_common") then
+          TaskPlayAnim(activeRobber, "mp_common", "givetake1_a", 8.0, -8.0, -1, 0, 0, false, false, false)
+        end
+        
+        Wait(Config.Robbery.theftAnimTime or 2000)
+        
+        -- Now make robber flee
+        if DoesEntityExist(activeRobber) then
+          ClearPedTasksImmediately(activeRobber)
+          TaskSmartFleePed(activeRobber, playerPed, 200.0, -1, false, false)
+          debugPrint("Robber stole items and is fleeing!")
+        end
+      else
+        -- If couldn't reach player, just flee
+        if DoesEntityExist(activeRobber) then
+          TaskSmartFleePed(activeRobber, playerPed, 200.0, -1, false, false)
+        end
+      end
+    end
+    
+    -- Monitor robber status
+    Citizen.CreateThread(function()
+      local startTime = GetGameTimer()
+      local hasFled = false
+      local hasRetaliated = false
+      
+      while robberActive and DoesEntityExist(activeRobber) do
+        Wait(500)
+        
+        -- Check if robber is dead
+        if IsEntityDead(activeRobber) then
+          CustomNotify(Config.Robbery.notifications.robberDead, 'success', 3000)
+          Wait(5000) -- Wait before cleanup
+          break
+        end
+        
+        -- Check if player attacked robber (non-violent mode only)
+        if not Config.Robbery.attackPlayer and Config.Robbery.fightBackIfAttacked and not hasRetaliated then
+          local robberHealth = GetEntityHealth(activeRobber)
+          local robberMaxHealth = GetEntityMaxHealth(activeRobber)
+          
+          -- If robber took damage, player attacked them
+          if robberHealth < robberMaxHealth then
+            hasRetaliated = true
+            ClearPedTasksImmediately(activeRobber)
+            TaskCombatPed(activeRobber, playerPed, 0, 16)
+            SetPedKeepTask(activeRobber, true)
+            CustomNotify('The robber is fighting back!', 'error', 3000)
+            debugPrint("Robber is retaliating after being attacked")
+          end
+        end
+        
+        -- Check flee condition
+        local robberHealth = GetEntityHealth(activeRobber)
+        local robberMaxHealth = GetEntityMaxHealth(activeRobber)
+        local healthPercent = (robberHealth / robberMaxHealth) * 100
+        
+        if not hasFled and healthPercent <= Config.Robbery.fleeHealthPercent then
+          local fleeRoll = math.random(1, 100)
+          if fleeRoll <= Config.Robbery.fleeChance then
+            hasFled = true
+            CustomNotify(Config.Robbery.notifications.robberFleeing, 'warning', 3000)
+            
+            -- Make robber flee
+            ClearPedTasksImmediately(activeRobber)
+            TaskSmartFleePed(activeRobber, playerPed, 200.0, -1, false, false)
+            
+            debugPrint("Robber is fleeing from player")
+          end
+        end
+        
+        -- Check distance for despawn
+        local robberCoords = GetEntityCoords(activeRobber)
+        local playerCoords = GetEntityCoords(PlayerPedId())
+        local distance = #(robberCoords - playerCoords)
+        
+        if distance > 100.0 or (GetGameTimer() - startTime) > Config.Robbery.despawnDelay then
+          debugPrint("Robber despawning - distance:", distance)
+          break
+        end
+      end
+      
+      -- Cleanup
+      if DoesEntityExist(activeRobber) then
+        DeleteEntity(activeRobber)
+      end
+      
+      activeRobber = nil
+      robberActive = false
+      debugPrint("Robbery sequence ended, robber cleaned up")
+    end)
+  end)
+end)
+
+RegisterNetEvent(Config.ResourceName..':robberyStoleCash')
+AddEventHandler(Config.ResourceName..':robberyStoleCash', function(amount)
+  local message = string.format(Config.Robbery.notifications.cashStolen, amount)
+  CustomNotify(message, 'error', 5000)
+  debugPrint("Robber stole cash:", amount)
+end)
+
+RegisterNetEvent(Config.ResourceName..':robberyStoleItems')
+AddEventHandler(Config.ResourceName..':robberyStoleItems', function(itemName, amount)
+  local message = string.format(Config.Robbery.notifications.itemsStolen, amount .. 'x ' .. itemName)
+  CustomNotify(message, 'error', 5000)
+  debugPrint("Robber stole items:", itemName, "x", amount)
+end)
+
 -- Helper functions
 function RequestTradeToken()
   local now = GetGameTimer()
