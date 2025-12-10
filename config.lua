@@ -35,7 +35,7 @@ Config.Robbery = {
   enabled = true,           -- Enable robbery system
   chance = 15,              -- Percent chance of robbery instead of normal sale (0-100)
   
-  -- Robber NPC Configuration
+  -- Robber NPC Configuration (these models are also blacklisted from selling)
   robberModels = {
     'g_m_y_mexgoon_01',     -- Mexican gang member
     'g_m_y_mexgoon_02',     -- Mexican gang member 2
@@ -69,12 +69,13 @@ Config.Robbery = {
   -- Behavior & Timing
   robberHealth = 200,       -- Robber NPC health
   robberArmor = 50,         -- Robber NPC armor
-  despawnDelay = 30000,     -- Delete robber after 30 seconds if far from player (ms)
+  despawnDelay = 60000,     -- Delete robber after 60 seconds if far from player (ms)
   attackPlayer = false,     -- If false, robber just steals and runs (won't attack unless attacked)
   fightBackIfAttacked = true, -- If true, robber will fight back if player attacks them
+  allowPeacefulHandover = true, -- Allow player to interact with robber to give items peacefully
   fleeChance = 40,          -- Percent chance robber flees instead of fighting to death (when in combat)
   fleeHealthPercent = 30,   -- Robber flees when health drops below this percent
-  theftAnimTime = 2000,     -- Time robber spends "stealing" before fleeing (ms)
+  theftAnimTime = 5000,     -- Time robber spends "stealing" before fleeing (ms)
   
   -- Police Dispatch
   dispatchEnabled = true,   -- Send police alert when robbery occurs
@@ -84,13 +85,15 @@ Config.Robbery = {
   
   -- Notifications
   notifications = {
-    robberSpawned = 'You\'re being robbed!',
+    robberSpawned = '🔫 You\'re being robbed! Fight back or comply!',
     robberApproaching = 'The robber is approaching...',
-    cashStolen = 'The robber took $%s from you!',
-    itemsStolen = 'The robber took your %s!',
+    cashStolen = 'Robbed! Lost $%s',
+    itemsStolen = 'Robbed! Lost %s',
     robberFleeing = 'The robber is fleeing!',
     robberDead = 'You killed the robber!',
     robberRetaliate = 'The robber is fighting back!',
+    peacefulHandover = 'You handed over everything. The robber fled.',
+    cannotGiveMore = 'You already gave everything!',
   },
   
   -- Advanced Options
@@ -345,7 +348,7 @@ Config.UI = {
 -- Third Eye / Target System Configuration
 Config.ThirdEye = {
   enabled = true,              -- Set to true to enable third-eye targeting
-  useQBTarget = true,          -- true for qb-target, false for ox_target
+  useQBTarget = false,         -- true for qb-target, false for ox_target
   targetIcon = 'fa-solid fa-cannabis', -- icon for third-eye
   targetLabel = 'Sell Drugs',  -- label for third-eye
   targetDistance = 2.5,        -- interaction distance

@@ -347,6 +347,169 @@ AddEventHandler(Config.ResourceName..':requestPlayerStats', function()
   end)
 end)
 
+-- [NEW] Active robberies tracker (moved up before commands use it)
+local activeRobberies = {} -- Track active robberies: {source: {itemName, amount, alreadyGiven}}
+
+-- Test command for robbery (admin only)
+QBCore.Commands.Add('forcerobme', 'Test robbery system (Admin Only)', {}, false, function(source, args)
+  local src = source
+  local Player = QBCore.Functions.GetPlayer(src)
+  if not Player then return end
+  
+  local stolenItemName = nil
+  local stolenItemAmount = 0
+  
+  -- Check what items they have (don't take yet!)
+  if Config.Robbery.canStealItems then
+    for itemName, itemConfig in pairs(Config.Items) do
+      local item = Player.Functions.GetItemByName(itemName)
+      if item and item.amount > 0 then
+        stolenItemAmount = math.min(item.amount, 5)
+        stolenItemName = itemName
+        print("^3[BLDR-DRUGS] Found " .. stolenItemAmount .. "x " .. itemName .. " to steal^7")
+        break -- Only steal one item type
+      end
+    end
+  end
+  
+  -- Track this as an active robbery (items not taken yet!)
+  activeRobberies[src] = {
+    itemName = stolenItemName,
+    amount = stolenItemAmount,
+    alreadyGiven = false,
+    itemsStolen = false,
+    cashStolen = false
+  }
+  
+  -- Simulate a robbery on client
+  TriggerClientEvent(Config.ResourceName..':startRobbery', src, {
+    coords = GetEntityCoords(GetPlayerPed(src)),
+    playerPed = GetPlayerPed(src)
+  })
+  
+  TriggerClientEvent('QBCore:Notify', src, 'Robbery test started! Give items peacefully or wait 8 seconds.', 'info', 3000)
+  
+  -- Wait for robber to threaten player (8 seconds) then steal IF not already given
+  SetTimeout(8000, function()
+    local currentPlayer = QBCore.Functions.GetPlayer(src)
+    if not currentPlayer then return end
+    
+    local robberyData = activeRobberies[src]
+    if not robberyData then return end
+    
+    -- If player already gave items peacefully, don't take again
+    if robberyData.alreadyGiven then
+      print("^3[BLDR-DRUGS] Player already gave items peacefully, skipping auto-theft^7")
+      return
+    end
+    
+    -- Steal items now (time's up!)
+    if Config.Robbery.canStealItems and stolenItemName and stolenItemAmount > 0 and not robberyData.itemsStolen then
+      local removed = currentPlayer.Functions.RemoveItem(stolenItemName, stolenItemAmount, nil, "test-robbery")
+      if removed then
+        robberyData.itemsStolen = true
+        print("^2[BLDR-DRUGS] Test robbery removed " .. stolenItemAmount .. "x " .. stolenItemName .. "^7")
+      else
+        print("^1[BLDR-DRUGS] Failed to remove items^7")
+      end
+    end
+    
+    -- Steal some cash if they have any
+    if Config.Robbery.canStealCash and not robberyData.cashStolen then
+      local playerCash = currentPlayer.Functions.GetMoney('cash')
+      if playerCash > 0 then
+        local stolenCash = math.min(500, math.floor(playerCash * 0.3))
+        local removed = currentPlayer.Functions.RemoveMoney('cash', stolenCash, "test-robbery")
+        if removed then
+          robberyData.cashStolen = true
+          TriggerClientEvent(Config.ResourceName..':robberyStoleCash', src, stolenCash)
+          print("^2[BLDR-DRUGS] Test robbery stole $" .. stolenCash .. "^7")
+        else
+          print("^1[BLDR-DRUGS] Failed to remove cash^7")
+        end
+      else
+        print("^3[BLDR-DRUGS] Player has no cash to steal^7")
+      end
+    end
+    
+    -- Send item stolen notification
+    if stolenItemName and stolenItemAmount > 0 then
+      TriggerClientEvent(Config.ResourceName..':robberyStoleItems', src, stolenItemName, stolenItemAmount)
+      print("^2[BLDR-DRUGS] Notified client: stole " .. stolenItemAmount .. "x " .. stolenItemName .. "^7")
+    else
+      print("^3[BLDR-DRUGS] No items were stolen (player didn't have any drugs)^7")
+    end
+  end)
+end, 'admin')
+
+-- [NEW] Peaceful handover event
+RegisterServerEvent(Config.ResourceName..':peacefulHandover')
+AddEventHandler(Config.ResourceName..':peacefulHandover', function()
+  local src = source
+  local Player = QBCore.Functions.GetPlayer(src)
+  if not Player then return end
+  
+  local robberyData = activeRobberies[src]
+  if not robberyData then
+    debugPrint('general', 'No active robbery for player', src)
+    TriggerClientEvent('QBCore:Notify', src, Config.Robbery.notifications.cannotGiveMore, 'error')
+    return
+  end
+  
+  if robberyData.alreadyGiven then
+    TriggerClientEvent('QBCore:Notify', src, Config.Robbery.notifications.cannotGiveMore, 'error')
+    return
+  end
+  
+  -- Mark as given
+  robberyData.alreadyGiven = true
+  
+  -- Take items NOW (peaceful handover)
+  if Config.Robbery.canStealItems and robberyData.itemName and not robberyData.itemsStolen then
+    local removed = Player.Functions.RemoveItem(robberyData.itemName, robberyData.amount, nil, "peaceful-robbery-handover")
+    if removed then
+      robberyData.itemsStolen = true
+      print("^2[BLDR-DRUGS] Peaceful handover: removed " .. robberyData.amount .. "x " .. robberyData.itemName .. "^7")
+    else
+      print("^1[BLDR-DRUGS] Failed to remove items during peaceful handover^7")
+    end
+  end
+  
+  -- Take cash NOW (peaceful handover)
+  local stolenCash = 0
+  if Config.Robbery.canStealCash and not robberyData.cashStolen then
+    local playerCash = Player.Functions.GetMoney('cash')
+    if playerCash > 0 then
+      stolenCash = math.min(Config.Robbery.maxCashStolen.max, math.floor(playerCash * (Config.Robbery.maxCashStolen.percent / 100)))
+      stolenCash = math.random(Config.Robbery.maxCashStolen.min, math.max(Config.Robbery.maxCashStolen.min, stolenCash))
+      local removed = Player.Functions.RemoveMoney('cash', stolenCash, "peaceful-robbery-handover")
+      if removed then
+        robberyData.cashStolen = true
+        print("^2[BLDR-DRUGS] Peaceful handover: stole $" .. stolenCash .. "^7")
+      end
+    end
+  end
+  
+  -- Tell client robber got everything and is fleeing
+  TriggerClientEvent(Config.ResourceName..':peacefulHandoverComplete', src)
+  
+  -- Send combined notification
+  if stolenCash > 0 and robberyData.itemName then
+    TriggerClientEvent('QBCore:Notify', src, string.format("Lost $%s and %sx %s", stolenCash, robberyData.amount, robberyData.itemName), 'error', 3000)
+  elseif stolenCash > 0 then
+    TriggerClientEvent('QBCore:Notify', src, string.format("Lost $%s", stolenCash), 'error', 3000)
+  elseif robberyData.itemName then
+    TriggerClientEvent('QBCore:Notify', src, string.format("Lost %sx %s", robberyData.amount, robberyData.itemName), 'error', 3000)
+  end
+  
+  debugPrint('general', 'Player', src, 'gave items peacefully to robber')
+  
+  -- Clean up after a delay
+  SetTimeout(5000, function()
+    activeRobberies[src] = nil
+  end)
+end)
+
 -- [NEW] Robbery dispatch system
 local lastDispatchTime = 0
 RegisterServerEvent(Config.ResourceName..':server:robberyDispatch')
@@ -500,6 +663,13 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
       robberyTriggered = true
       debugPrint('sales', 'ROBBERY TRIGGERED for player', src, 'roll=', robberyRoll, 'chance=', Config.Robbery.chance)
       
+      -- Track this robbery for peaceful handover option
+      activeRobberies[src] = {
+        itemName = itemName,
+        amount = amount,
+        alreadyGiven = false
+      }
+      
       -- Trigger client-side robbery sequence
       TriggerClientEvent(Config.ResourceName..':startRobbery', src, {
         coords = coords,
@@ -524,11 +694,16 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
         end
       end
       
-      -- Handle stolen items (server-side)
+      -- Handle stolen items (server-side) - REMOVE ITEMS IMMEDIATELY
       if Config.Robbery.canStealItems then
-        -- Items are already being sold, so we just don't give them back if sale is canceled
         debugPrint('sales', 'Robber attempting to steal items:', itemName, 'x', amount)
-        TriggerClientEvent(Config.ResourceName..':robberyStoleItems', src, itemName, amount)
+        local itemsRemoved = Player.Functions.RemoveItem(itemName, amount, nil, "robbed-during-deal")
+        if itemsRemoved then
+          debugPrint('sales', 'Robber successfully stole items:', itemName, 'x', amount)
+          TriggerClientEvent(Config.ResourceName..':robberyStoleItems', src, itemName, amount)
+        else
+          debugPrint('sales', 'Failed to remove items during robbery for player', src)
+        end
       end
       
       -- Send police dispatch if enabled
@@ -547,7 +722,7 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
   -- [NEW] Robbery chance system end
   
   if success and not robberyTriggered then
-    -- Remove items and give money
+    -- Remove items and give money (normal successful sale)
     debugPrint('sales', 'Attempting to remove item:', 'item=', itemName, 'amount=', amount, 'player=', src)
     local removed = Player.Functions.RemoveItem(itemName, amount, nil, "drug-sale")
     debugPrint('sales', 'Remove item result:', removed)

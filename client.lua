@@ -11,6 +11,8 @@ local nearbyNPC = nil
 local isInteracting = false
 local thirdEyeTargets = {}
 local npcCooldowns = {} -- Track NPCs we've recently dealt with: {entityId: expireTime}
+local activeRobber = nil
+local robberActive = false
 
 -- Custom notification function with improved visibility
 local function CustomNotify(text, type, duration)
@@ -76,11 +78,22 @@ local function IsNPCAllowed(entity)
     return true -- No filtering enabled
   end
   
-  if not DoesEntityExist(entity) or IsPedAPlayer(entity) then
+  -- Validate entity exists and is valid before any other checks
+  if not entity or entity == 0 or not DoesEntityExist(entity) then
     return false
   end
   
-  local model = GetEntityModel(entity)
+  -- Check if it's a player
+  if IsPedAPlayer(entity) then
+    return false
+  end
+  
+  -- Safely get the model with additional validation
+  local success, model = pcall(GetEntityModel, entity)
+  if not success or not model or model == 0 then
+    return false
+  end
+  
   local modelName = GetHashKey(model) -- Get hash for comparison
   
   -- Convert model hashes to strings for comparison
@@ -91,6 +104,15 @@ local function IsNPCAllowed(entity)
       end
     end
     return false
+  end
+  
+  -- Check if this is a robber model (blacklist robber types from selling)
+  if Config.Robbery and Config.Robbery.robberModels then
+    for _, robberModel in pairs(Config.Robbery.robberModels) do
+      if GetHashKey(robberModel) == model then
+        return false -- Can't sell to robber types
+      end
+    end
   end
   
   -- Check vehicle restriction
@@ -328,6 +350,21 @@ local function SetupThirdEyeTargets()
         },
         distance = Config.ThirdEye.targetDistance
       })
+    else
+      exports.ox_target:addGlobalPed({
+        {
+          name = 'bldr_drugs_sell_ped',
+          icon = Config.ThirdEye.targetIcon,
+          label = Config.ThirdEye.targetLabel,
+          distance = Config.ThirdEye.targetDistance,
+          canInteract = function(entity, distance, coords, name, bone)
+            return IsNPCAllowed(entity)
+          end,
+          onSelect = function(data)
+            TriggerEvent('bldr-drugs:openSelling', data)
+          end
+        }
+      })
     end
   end
   
@@ -345,6 +382,18 @@ local function SetupThirdEyeTargets()
         },
         distance = Config.ThirdEye.targetDistance
       })
+    else
+      exports.ox_target:addGlobalVehicle({
+        {
+          name = 'bldr_drugs_sell_vehicle',
+          icon = Config.ThirdEye.targetIcon,
+          label = Config.ThirdEye.targetLabel,
+          distance = Config.ThirdEye.targetDistance,
+          onSelect = function(data)
+            TriggerEvent('bldr-drugs:openSelling', data)
+          end
+        }
+      })
     end
   end
   
@@ -361,6 +410,18 @@ local function SetupThirdEyeTargets()
           }
         },
         distance = Config.ThirdEye.targetDistance
+      })
+    else
+      exports.ox_target:addModel(Config.ThirdEye.targetModels, {
+        {
+          name = 'bldr_drugs_sell_object',
+          icon = Config.ThirdEye.targetIcon,
+          label = Config.ThirdEye.targetLabel,
+          distance = Config.ThirdEye.targetDistance,
+          onSelect = function(data)
+            TriggerEvent('bldr-drugs:openSelling', data)
+          end
+        }
       })
     end
   end
@@ -383,6 +444,21 @@ local function SetupThirdEyeTargets()
         },
         distance = Config.ThirdEye.targetDistance
       })
+    else
+      exports.ox_target:addGlobalPlayer({
+        {
+          name = 'bldr_drugs_sell_freeaim',
+          icon = Config.ThirdEye.targetIcon,
+          label = Config.ThirdEye.targetLabel .. " (Freeaim)",
+          distance = Config.ThirdEye.targetDistance,
+          canInteract = function(entity, distance, coords, name, bone)
+            return entity == PlayerPedId()
+          end,
+          onSelect = function(data)
+            TriggerEvent('bldr-drugs:openSelling', data)
+          end
+        }
+      })
     end
   end
 end
@@ -397,6 +473,19 @@ local function RemoveThirdEyeTargets()
     if Config.ThirdEye.targetModels then
       exports['qb-target']:RemoveTargetModel(Config.ThirdEye.targetModels, Config.ThirdEye.targetLabel)
     end
+  else
+    if Config.ThirdEye.targets.peds then
+      exports.ox_target:removeGlobalPed('bldr_drugs_sell_ped')
+    end
+    if Config.ThirdEye.targets.vehicles then
+      exports.ox_target:removeGlobalVehicle('bldr_drugs_sell_vehicle')
+    end
+    if Config.ThirdEye.targets.objects and Config.ThirdEye.targetModels then
+      exports.ox_target:removeModel(Config.ThirdEye.targetModels, 'bldr_drugs_sell_object')
+    end
+    if Config.ThirdEye.targets.freeaim then
+      exports.ox_target:removeGlobalPlayer('bldr_drugs_sell_freeaim')
+    end
   end
 end
 
@@ -404,6 +493,12 @@ end
 RegisterNetEvent('bldr-drugs:openSelling', function(data)
   -- If we have entity data (third-eye interaction), make NPC face player
   if data and data.entity and DoesEntityExist(data.entity) and not IsPedAPlayer(data.entity) then
+    -- Check if this is the robber
+    if currentRobberEntity and data.entity == currentRobberEntity then
+      CustomNotify('You can\'t sell to someone who just robbed you!', 'error')
+      return
+    end
+    
     -- Check if this NPC is allowed for selling
     if not IsNPCAllowed(data.entity) then
       CustomNotify('This person is not interested in your business', 'error')
@@ -796,8 +891,8 @@ AddEventHandler(Config.ResourceName..':startRobbery', function(data)
   robberActive = true
   debugPrint("Starting robbery sequence...")
   
-  -- Show initial notification
-  CustomNotify(Config.Robbery.notifications.robberSpawned, 'error', 5000)
+  -- Show single initial notification
+  CustomNotify(Config.Robbery.notifications.robberSpawned, 'error', 3000)
   
   -- Spawn robber NPC
   Citizen.CreateThread(function()
@@ -805,35 +900,121 @@ AddEventHandler(Config.ResourceName..':startRobbery', function(data)
     local playerCoords = GetEntityCoords(playerPed)
     local playerHeading = GetEntityHeading(playerPed)
     
-    -- Spawn slightly behind/to the side of player
-    local spawnOffset = vector3(
-      math.random(-3, 3),
-      math.random(-5, -3), -- Behind player
-      0.0
+    -- Calculate spawn position using player's forward vector (spawn in front/side of player)
+    local forwardVector = GetEntityForwardVector(playerPed)
+    local rightVector = vector3(-forwardVector.y, forwardVector.x, 0.0)
+    
+    -- Spawn 5-8 meters away, slightly to the side
+    local distance = math.random(50, 80) / 10.0 -- 5.0 to 8.0 meters
+    local sideOffset = math.random(-20, 20) / 10.0 -- -2.0 to 2.0 meters to the side
+    
+    local spawnCoords = vector3(
+      playerCoords.x + (forwardVector.x * distance) + (rightVector.x * sideOffset),
+      playerCoords.y + (forwardVector.y * distance) + (rightVector.y * sideOffset),
+      playerCoords.z
     )
-    local spawnCoords = playerCoords + spawnOffset
+    
+    -- Get ground Z coordinate
+    local groundZ = spawnCoords.z
+    local foundGround, groundZCoord = GetGroundZFor_3dCoord(spawnCoords.x, spawnCoords.y, spawnCoords.z + 50.0, false)
+    if foundGround then
+      groundZ = groundZCoord
+    end
+    
+    spawnCoords = vector3(spawnCoords.x, spawnCoords.y, groundZ)
     
     -- Get random robber model
     local modelName = Config.Robbery.robberModels[math.random(#Config.Robbery.robberModels)]
     local modelHash = GetHashKey(modelName)
     
+    print("^3[BLDR-DRUGS] Spawning robber model: " .. modelName .. " at coords: " .. tostring(spawnCoords) .. "^7")
+    
     -- Load model
     RequestModel(modelHash)
-    while not HasModelLoaded(modelHash) do
+    local timeout = GetGameTimer() + 10000
+    while not HasModelLoaded(modelHash) and GetGameTimer() < timeout do
       Wait(100)
     end
     
+    if not HasModelLoaded(modelHash) then
+      print("^1[BLDR-DRUGS] Failed to load robber model: " .. modelName .. "^7")
+      CustomNotify("Robbery failed (model load error)", "error", 3000)
+      robberActive = false
+      return
+    end
+    
+    print("^2[BLDR-DRUGS] Model loaded successfully^7")
+    
     -- Create robber ped
-    activeRobber = CreatePed(4, modelHash, spawnCoords.x, spawnCoords.y, spawnCoords.z, playerHeading, true, false)
+    activeRobber = CreatePed(4, modelHash, spawnCoords.x, spawnCoords.y, spawnCoords.z, 0.0, true, true)
+    
+    -- Wait a moment for entity to fully spawn
+    Wait(100)
+    
+    if not DoesEntityExist(activeRobber) or activeRobber == 0 then
+      print("^1[BLDR-DRUGS] Failed to create robber entity!^7")
+      CustomNotify("Robbery failed (spawn error)", "error", 3000)
+      robberActive = false
+      SetModelAsNoLongerNeeded(modelHash)
+      return
+    end
+    
+    print("^2[BLDR-DRUGS] Robber created successfully, entity ID: " .. activeRobber .. "^7")
+    
+    -- Store robber entity for checking
+    currentRobberEntity = activeRobber
+    
+    -- Configure robber
     SetEntityAsMissionEntity(activeRobber, true, true)
+    SetBlockingOfNonTemporaryEvents(activeRobber, true)
     SetPedFleeAttributes(activeRobber, 0, false)
-    SetPedCombatAttributes(activeRobber, 46, true) -- Always fight
+    SetPedCombatAttributes(activeRobber, 46, true)
     SetPedCombatAbility(activeRobber, 100)
-    SetPedCombatRange(activeRobber, 2) -- Stay close
+    SetPedCombatRange(activeRobber, 2)
+    SetEntityInvincible(activeRobber, false)
+    SetPedCanRagdoll(activeRobber, true)
+    SetPedCanRagdollFromPlayerImpact(activeRobber, true)
+    
+    -- Ensure ped is on ground
+    local groundZ = spawnCoords.z
+    for i = 1, 5 do
+      SetEntityCoords(activeRobber, spawnCoords.x, spawnCoords.y, groundZ, false, false, false, false)
+      PlaceObjectOnGroundProperly(activeRobber)
+      Wait(50)
+    end
+    
+    print("^2[BLDR-DRUGS] Robber configured and placed on ground^7")
     
     -- Set health and armor
     SetEntityHealth(activeRobber, Config.Robbery.robberHealth)
     SetPedArmour(activeRobber, Config.Robbery.robberArmor)
+    
+    -- Add interaction option if peaceful handover is enabled
+    if Config.Robbery.allowPeacefulHandover and not Config.ThirdEye.useQBTarget then
+      exports.ox_target:addLocalEntity(activeRobber, {
+        {
+          name = 'bldr_drugs_robber_handover',
+          icon = 'fas fa-hand-holding',
+          label = 'Give Items Peacefully',
+          distance = 3.0,
+          onSelect = function()
+            TriggerServerEvent(Config.ResourceName..':peacefulHandover')
+          end
+        }
+      })
+    elseif Config.Robbery.allowPeacefulHandover and Config.ThirdEye.useQBTarget then
+      exports['qb-target']:AddTargetEntity(activeRobber, {
+        options = {
+          {
+            type = "client",
+            event = Config.ResourceName..":peacefulHandover",
+            icon = "fas fa-hand-holding",
+            label = "Give Items Peacefully",
+          }
+        },
+        distance = 3.0
+      })
+    end
     
     -- Give weapon if configured
     local weaponHash = nil
@@ -858,41 +1039,66 @@ AddEventHandler(Config.ResourceName..':startRobbery', function(data)
       end
       debugPrint("Robber spawned and attacking player")
     else
-      -- New non-violent behavior: approach, "steal", then flee
-      TaskGoToEntity(activeRobber, playerPed, -1, 2.0, 2.0, 1073741824, 0)
-      debugPrint("Robber approaching to steal items...")
+      -- New non-violent behavior: approach, threaten, wait, then flee
+      -- Make robber point weapon at player
+      if weaponHash then
+        SetCurrentPedWeapon(activeRobber, weaponHash, true)
+      end
+      
+      -- Wait a moment before approaching (gives player time to see robber)
+      Wait(1000)
+      
+      TaskGoToEntity(activeRobber, playerPed, -1, 2.5, 1.5, 1073741824, 0)
+      debugPrint("Robber approaching to rob player...")
       
       -- Wait for robber to reach player
       local reachedPlayer = false
-      local timeout = GetGameTimer() + 5000
+      local timeout = GetGameTimer() + 8000
       while DoesEntityExist(activeRobber) and not reachedPlayer and GetGameTimer() < timeout do
         local robberCoords = GetEntityCoords(activeRobber)
         local playerCoords = GetEntityCoords(playerPed)
         local distance = #(robberCoords - playerCoords)
         
-        if distance < 3.0 then
+        if distance < 4.0 then
           reachedPlayer = true
         end
         Wait(100)
       end
       
       if DoesEntityExist(activeRobber) and reachedPlayer then
-        -- Play theft animation
+        -- Stop and face player
         ClearPedTasksImmediately(activeRobber)
-        TaskTurnPedToFaceEntity(activeRobber, playerPed, Config.Robbery.theftAnimTime or 2000)
+        TaskTurnPedToFaceEntity(activeRobber, playerPed, 1000)
+        Wait(500)
         
-        -- Play animation if available
-        if HasAnimDictLoaded("mp_common") then
-          TaskPlayAnim(activeRobber, "mp_common", "givetake1_a", 8.0, -8.0, -1, 0, 0, false, false, false)
+        -- Point weapon and demand items (no extra notification, just threat)
+        if weaponHash then
+          TaskAimGunAtEntity(activeRobber, playerPed, 5000, false)
         end
         
-        Wait(Config.Robbery.theftAnimTime or 2000)
+        -- Wait while "threatening" player - give them time to interact or items get stolen
+        local threatTime = 8000 -- 8 seconds for player to react (use target interaction)
+        Wait(threatTime)
         
+        -- After threat time, take items (server handles this separately)
         -- Now make robber flee
         if DoesEntityExist(activeRobber) then
           ClearPedTasksImmediately(activeRobber)
-          TaskSmartFleePed(activeRobber, playerPed, 200.0, -1, false, false)
-          debugPrint("Robber stole items and is fleeing!")
+          
+          -- Play a brief "grab" animation
+          RequestAnimDict("mp_common")
+          while not HasAnimDictLoaded("mp_common") do
+            Wait(10)
+          end
+          TaskPlayAnim(activeRobber, "mp_common", "givetake1_a", 8.0, -8.0, 1200, 0, 0, false, false, false)
+          Wait(1200)
+          
+          -- Now flee
+          if DoesEntityExist(activeRobber) then
+            ClearPedTasksImmediately(activeRobber)
+            TaskSmartFleePed(activeRobber, playerPed, 200.0, -1, false, false)
+            debugPrint("Robber grabbed items and is fleeing!")
+          end
         end
       else
         -- If couldn't reach player, just flee
@@ -904,32 +1110,35 @@ AddEventHandler(Config.ResourceName..':startRobbery', function(data)
     
     -- Monitor robber status
     Citizen.CreateThread(function()
+      print("^3[BLDR-DRUGS] Starting robber monitor thread^7")
       local startTime = GetGameTimer()
       local hasFled = false
       local hasRetaliated = false
+      local initialHealth = GetEntityHealth(activeRobber)
+      
+      Wait(1000) -- Wait a moment before starting checks
       
       while robberActive and DoesEntityExist(activeRobber) do
         Wait(500)
         
-        -- Check if robber is dead
-        if IsEntityDead(activeRobber) then
-          CustomNotify(Config.Robbery.notifications.robberDead, 'success', 3000)
+        local currentHealth = GetEntityHealth(activeRobber)
+        
+        -- Check if robber is dead (health is 0 or very low)
+        if currentHealth <= 100 or IsEntityDead(activeRobber) then
+          print("^1[BLDR-DRUGS] Robber died! Health: " .. currentHealth .. "^7")
           Wait(5000) -- Wait before cleanup
           break
         end
         
         -- Check if player attacked robber (non-violent mode only)
         if not Config.Robbery.attackPlayer and Config.Robbery.fightBackIfAttacked and not hasRetaliated then
-          local robberHealth = GetEntityHealth(activeRobber)
-          local robberMaxHealth = GetEntityMaxHealth(activeRobber)
-          
           -- If robber took damage, player attacked them
-          if robberHealth < robberMaxHealth then
+          if currentHealth < initialHealth - 10 then
             hasRetaliated = true
+            print("^3[BLDR-DRUGS] Player attacked robber, retaliating!^7")
             ClearPedTasksImmediately(activeRobber)
-            TaskCombatPed(activeRobber, playerPed, 0, 16)
+            TaskCombatPed(activeRobber, PlayerPedId(), 0, 16)
             SetPedKeepTask(activeRobber, true)
-            CustomNotify('The robber is fighting back!', 'error', 3000)
             debugPrint("Robber is retaliating after being attacked")
           end
         end
@@ -943,7 +1152,6 @@ AddEventHandler(Config.ResourceName..':startRobbery', function(data)
           local fleeRoll = math.random(1, 100)
           if fleeRoll <= Config.Robbery.fleeChance then
             hasFled = true
-            CustomNotify(Config.Robbery.notifications.robberFleeing, 'warning', 3000)
             
             -- Make robber flee
             ClearPedTasksImmediately(activeRobber)
@@ -969,6 +1177,7 @@ AddEventHandler(Config.ResourceName..':startRobbery', function(data)
         DeleteEntity(activeRobber)
       end
       
+      currentRobberEntity = nil
       activeRobber = nil
       robberActive = false
       debugPrint("Robbery sequence ended, robber cleaned up")
@@ -976,18 +1185,56 @@ AddEventHandler(Config.ResourceName..':startRobbery', function(data)
   end)
 end)
 
+-- Track stolen items to combine notification
+local robberyLoot = { cash = 0, items = {} }
+
 RegisterNetEvent(Config.ResourceName..':robberyStoleCash')
 AddEventHandler(Config.ResourceName..':robberyStoleCash', function(amount)
-  local message = string.format(Config.Robbery.notifications.cashStolen, amount)
-  CustomNotify(message, 'error', 5000)
+  robberyLoot.cash = amount
   debugPrint("Robber stole cash:", amount)
+  
+  -- Show combined notification after short delay
+  SetTimeout(1000, function()
+    local message = ""
+    if robberyLoot.cash > 0 and #robberyLoot.items > 0 then
+      message = string.format("Robbed! Lost $%s and %s", robberyLoot.cash, robberyLoot.items[1])
+    elseif robberyLoot.cash > 0 then
+      message = string.format(Config.Robbery.notifications.cashStolen, robberyLoot.cash)
+    elseif #robberyLoot.items > 0 then
+      message = string.format("Robbed! Lost %s", robberyLoot.items[1])
+    end
+    
+    if message ~= "" then
+      CustomNotify(message, 'error', 3000)
+    end
+    
+    -- Reset loot tracker
+    robberyLoot = { cash = 0, items = {} }
+  end)
 end)
 
 RegisterNetEvent(Config.ResourceName..':robberyStoleItems')
 AddEventHandler(Config.ResourceName..':robberyStoleItems', function(itemName, amount)
-  local message = string.format(Config.Robbery.notifications.itemsStolen, amount .. 'x ' .. itemName)
-  CustomNotify(message, 'error', 5000)
+  table.insert(robberyLoot.items, amount .. 'x ' .. itemName)
   debugPrint("Robber stole items:", itemName, "x", amount)
+end)
+
+RegisterNetEvent(Config.ResourceName..':peacefulHandover')
+AddEventHandler(Config.ResourceName..':peacefulHandover', function()
+  TriggerServerEvent(Config.ResourceName..':peacefulHandover')
+end)
+
+RegisterNetEvent(Config.ResourceName..':peacefulHandoverComplete')
+AddEventHandler(Config.ResourceName..':peacefulHandoverComplete', function()
+  -- Make robber flee immediately (no notification, server sends combined one)
+  if DoesEntityExist(activeRobber) then
+    ClearPedTasksImmediately(activeRobber)
+    local playerPed = PlayerPedId()
+    TaskSmartFleePed(activeRobber, playerPed, 200.0, -1, false, false)
+    SetPedKeepTask(activeRobber, true)
+    print("^2[BLDR-DRUGS] Robber received peaceful handover and is fleeing^7")
+    debugPrint("Robber received peaceful handover and is fleeing")
+  end
 end)
 
 -- Helper functions
@@ -1016,6 +1263,20 @@ Citizen.CreateThread(function()
   end
   debugPrint("Gesture animations loaded")
 end)
+
+-- Test command for robbery
+RegisterCommand('testrobbery', function()
+  local playerPed = PlayerPedId()
+  local playerCoords = GetEntityCoords(playerPed)
+  
+  CustomNotify('Testing robbery system...', 'info', 2000)
+  
+  -- Trigger robbery event directly
+  TriggerEvent(Config.ResourceName..':startRobbery', {
+    coords = playerCoords,
+    playerPed = playerPed
+  })
+end, false)
 
 -- Event to handle when player spawns/loads
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded')

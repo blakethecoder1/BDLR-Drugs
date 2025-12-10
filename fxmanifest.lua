@@ -30,6 +30,10 @@ files {
 dependencies {
   'qb-core',
   'ox_lib',
-  'oxmysql',
-  'qb-target'  -- Third-eye system
+  'oxmysql'
+}
+
+optional_dependencies {
+  'qb-target',
+  'ox_target'
 }
