@@ -7,6 +7,18 @@ let currentPlayerData = {
   nextLevelXP: 100
 };
 let selectedItem = null;
+let nuiDebug = false;
+let mouseDebugListenersAttached = false;
+
+function debugLog(...args) {
+  if (nuiDebug) {
+    console.log(...args);
+  }
+}
+
+function setNuiDebug(enabled) {
+  nuiDebug = enabled === true;
+}
 
 // Apply custom UI colors from config
 function applyCustomColors(colors) {
@@ -23,7 +35,7 @@ function applyCustomColors(colors) {
   if (colors.warning) root.style.setProperty('--color-warning', colors.warning);
   if (colors.error) root.style.setProperty('--color-error', colors.error);
   
-  console.log('Applied custom UI colors:', colors);
+  debugLog('Applied custom UI colors:', colors);
 }
 
 // Apply custom gradients
@@ -35,7 +47,7 @@ function applyCustomGradients(gradients) {
   if (gradients.header) root.style.setProperty('--gradient-header', gradients.header);
   if (gradients.xpBar) root.style.setProperty('--gradient-xp', gradients.xpBar);
   
-  console.log('Applied custom gradients:', gradients);
+  debugLog('Applied custom gradients:', gradients);
 }
 
 // Get the correct resource name for NUI communication
@@ -54,7 +66,7 @@ function fetchAvailableItems(retryCount = 0) {
   const retryDelay = 1000; // 1 second
   const resourceName = getResourceName();
   
-  console.log('Fetching items from resource:', resourceName, 'attempt:', retryCount + 1);
+  debugLog('Fetching items from resource:', resourceName, 'attempt:', retryCount + 1);
   
   // Test NUI communication first
   if (retryCount === 0) {
@@ -63,7 +75,7 @@ function fetchAvailableItems(retryCount = 0) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({})
     }).then(resp => resp.json()).then(data => {
-      console.log('NUI test successful:', data);
+      debugLog('NUI test successful:', data);
     }).catch(err => {
       console.error('NUI test failed:', err);
     });
@@ -74,12 +86,12 @@ function fetchAvailableItems(retryCount = 0) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({})
   }).then(resp => {
-    console.log('Response status:', resp.status, 'OK:', resp.ok);
+    debugLog('Response status:', resp.status, 'OK:', resp.ok);
     if (!resp.ok) {
       throw new Error(`HTTP error! status: ${resp.status}`);
     }
     return resp.text().then(text => {
-      console.log('Raw response:', text);
+      debugLog('Raw response:', text);
       try {
         return text ? JSON.parse(text) : {};
       } catch (e) {
@@ -88,22 +100,22 @@ function fetchAvailableItems(retryCount = 0) {
       }
     });
   }).then(data => {
-    console.log('Parsed data:', data);
+    debugLog('Parsed data:', data);
     availableItems = data.items || [];
     populateItemSelect();
-    console.log('Successfully loaded', availableItems.length, 'available items');
+    debugLog('Successfully loaded', availableItems.length, 'available items');
   }).catch(err => {
     console.error('Failed to get available items (attempt', retryCount + 1, '):', err);
     
     if (retryCount < maxRetries) {
-      console.log('Retrying in', retryDelay, 'ms...');
+      debugLog('Retrying in', retryDelay, 'ms...');
       setTimeout(() => {
         fetchAvailableItems(retryCount + 1);
       }, retryDelay);
     } else {
       showStatus('Failed to load available items after ' + (maxRetries + 1) + ' attempts', 'error');
       // Add some fallback items for testing
-      console.log('Adding fallback items for testing');
+      debugLog('Adding fallback items for testing');
       availableItems = [
         { name: 'weed', label: 'Weed', basePrice: 50, maxAmount: 50, description: 'High quality street weed' }
       ];
@@ -226,7 +238,8 @@ window.addEventListener('message', (event) => {
   const data = event.data;
   
   if (data.action === 'open') {
-    console.log('UI opened, adding mouse event debugging');
+    setNuiDebug(data.debug === true);
+    debugLog('UI opened, adding mouse event debugging');
     document.getElementById('app').classList.remove('hidden');
     resetAutoCloseTimer(); // Start auto-close timer
     
@@ -238,14 +251,18 @@ window.addEventListener('message', (event) => {
       applyCustomGradients(data.gradients);
     }
     
-    // Add debugging for mouse interaction
-    document.addEventListener('click', function(e) {
-      console.log('Click detected on:', e.target.tagName, e.target.id, e.target.className);
-    }, { once: false });
-    
-    document.addEventListener('mousedown', function(e) {
-      console.log('Mouse down detected on:', e.target.tagName, e.target.id);
-    }, { once: false });
+    // Add debugging for mouse interaction once
+    if (!mouseDebugListenersAttached) {
+      document.addEventListener('click', function(e) {
+        debugLog('Click detected on:', e.target.tagName, e.target.id, e.target.className);
+      }, { once: false });
+
+      document.addEventListener('mousedown', function(e) {
+        debugLog('Mouse down detected on:', e.target.tagName, e.target.id);
+      }, { once: false });
+
+      mouseDebugListenersAttached = true;
+    }
     
     // Update player info
     if (data.playerLevel !== undefined) {
@@ -258,14 +275,14 @@ window.addEventListener('message', (event) => {
     }
     
     // Request available items with retry mechanism (delayed start)
-    console.log('UI opened, requesting available items...');
+    debugLog('UI opened, requesting available items...');
     
     // Force request player stats first
     fetch(`https://${getResourceName()}/requestPlayerStats`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({})
-    }).catch(err => console.log('Player stats request sent'));
+    }).catch(() => debugLog('Player stats request sent'));
     
     setTimeout(() => {
       fetchAvailableItems();
@@ -275,17 +292,17 @@ window.addEventListener('message', (event) => {
       const closeBtn = document.getElementById('closeBtn');
       const itemSelect = document.getElementById('itemSelect');
       
-      console.log('UI elements check:');
-      console.log('Sell button:', sellBtn ? 'Found' : 'Missing', sellBtn?.style.display);
-      console.log('Close button:', closeBtn ? 'Found' : 'Missing', closeBtn?.style.display);
-      console.log('Item select:', itemSelect ? 'Found' : 'Missing', itemSelect?.style.display);
+      debugLog('UI elements check:');
+      debugLog('Sell button:', sellBtn ? 'Found' : 'Missing', sellBtn?.style.display);
+      debugLog('Close button:', closeBtn ? 'Found' : 'Missing', closeBtn?.style.display);
+      debugLog('Item select:', itemSelect ? 'Found' : 'Missing', itemSelect?.style.display);
       
       // Test if elements are clickable
       if (sellBtn) {
-        console.log('Sell button clickable:', !sellBtn.disabled, 'Style:', getComputedStyle(sellBtn).pointerEvents);
+        debugLog('Sell button clickable:', !sellBtn.disabled, 'Style:', getComputedStyle(sellBtn).pointerEvents);
       }
       if (closeBtn) {
-        console.log('Close button clickable:', !closeBtn.disabled, 'Style:', getComputedStyle(closeBtn).pointerEvents);
+        debugLog('Close button clickable:', !closeBtn.disabled, 'Style:', getComputedStyle(closeBtn).pointerEvents);
       }
       
     }, 500); // Wait 500ms to ensure resource is ready
@@ -297,13 +314,13 @@ window.addEventListener('message', (event) => {
 });
 
 document.getElementById('closeBtn').addEventListener('click', () => {
-  console.log('Close button clicked');
+  debugLog('Close button clicked');
   closeUI();
 });
 
 // Add click debugging to sell button
 document.getElementById('sellBtn').addEventListener('click', () => {
-  console.log('Sell button clicked');
+  debugLog('Sell button clicked');
   // Rest of sell logic follows...
 });
 
@@ -314,7 +331,7 @@ function closeUI() {
   if (isClosing) return; // Prevent double-closing
   isClosing = true;
   
-  console.log('Closing UI...');
+  debugLog('Closing UI...');
   document.getElementById('app').classList.add('hidden');
   
   // Send close request to Lua (only once)
@@ -323,7 +340,7 @@ function closeUI() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({})
   }).then(() => {
-    console.log('Close callback sent successfully');
+    debugLog('Close callback sent successfully');
   }).catch(err => {
     console.error('Close callback error:', err);
   }).finally(() => {
@@ -339,7 +356,7 @@ let autoCloseTimer = null;
 function resetAutoCloseTimer() {
   if (autoCloseTimer) clearTimeout(autoCloseTimer);
   autoCloseTimer = setTimeout(() => {
-    console.log('Auto-closing UI due to timeout');
+    debugLog('Auto-closing UI due to timeout');
     closeUI();
   }, 300000); // 5 minutes
 }
@@ -390,20 +407,20 @@ document.getElementById('increaseBtn').addEventListener('click', () => {
 });
 
 document.getElementById('sellBtn').addEventListener('click', () => {
-  console.log('Sell button clicked - starting validation');
+  debugLog('Sell button clicked - starting validation');
   
   if (!selectedItem) {
-    console.log('No item selected');
+    debugLog('No item selected');
     showStatus('Please select an item to sell', 'error');
     return;
   }
   
-  console.log('Selected item:', selectedItem);
+  debugLog('Selected item:', selectedItem);
   
   const amount = parseInt(document.getElementById('amount').value);
   
   if (!amount || amount <= 0) {
-    console.log('Invalid amount:', amount);
+    debugLog('Invalid amount:', amount);
     showStatus('Please enter a valid amount', 'error');
     return;
   }
@@ -431,12 +448,12 @@ document.getElementById('sellBtn').addEventListener('click', () => {
     headers: { 'Content-Type': 'application/json; charset=UTF-8' },
     body: JSON.stringify(payload)
   }).then(resp => {
-    console.log('Sell response status:', resp.status, 'OK:', resp.ok);
+    debugLog('Sell response status:', resp.status, 'OK:', resp.ok);
     if (!resp.ok) {
       throw new Error(`HTTP error! status: ${resp.status}`);
     }
     return resp.text().then(text => {
-      console.log('Sell response text:', text);
+      debugLog('Sell response text:', text);
       try {
         return text ? JSON.parse(text) : { success: false, reason: 'empty_response' };
       } catch (e) {
@@ -445,7 +462,7 @@ document.getElementById('sellBtn').addEventListener('click', () => {
       }
     });
   }).then(data => {
-    console.log('Parsed sell response:', data);
+    debugLog('Parsed sell response:', data);
     
     if (data.success) {
       const price = data.moneyEarned || 0;
@@ -722,7 +739,7 @@ function initializeThemeModal() {
       body: JSON.stringify({ colors: colors })
     }).then(resp => resp.json()).then(data => {
       if (data.success) {
-        console.log('Colors saved successfully');
+        debugLog('Colors saved successfully');
         themeModal.classList.add('hidden');
       } else {
         console.error('Failed to save colors:', data.message);

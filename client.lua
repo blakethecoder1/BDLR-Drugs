@@ -14,6 +14,14 @@ local npcCooldowns = {} -- Track NPCs we've recently dealt with: {entityId: expi
 local activeRobber = nil
 local robberActive = false
 
+-- Admin creator dynamic data
+local DynamicItems = {}
+local DynamicRecipes = {}
+local DynamicTables = {}
+local creatorCache = { items = {}, recipes = {}, tables = {} }
+local recipeLookup = {}
+local SetupCraftingTables
+
 -- Custom notification function with improved visibility
 local function CustomNotify(text, type, duration)
   local notifyType = type or 'info'
@@ -243,20 +251,32 @@ local function GetPlayerLevelInfo(xp)
   return level, title, multiplier, nextLevelXP
 end
 
+local function GetMergedItems()
+  local merged = {}
+  for itemName, itemConfig in pairs(Config.Items or {}) do
+    merged[itemName] = itemConfig
+  end
+  for itemName, itemConfig in pairs(DynamicItems or {}) do
+    merged[itemName] = itemConfig
+  end
+  return merged
+end
+
 local function GetAvailableItems()
   local availableItems = {}
   local currentLevel = playerLevel or 0 -- Fallback to 0 if playerLevel is nil
   
   debugPrint("Getting available items for level:", currentLevel)
   
-  for itemName, itemConfig in pairs(Config.Items) do
+  for itemName, itemConfig in pairs(GetMergedItems()) do
     if currentLevel >= itemConfig.minLevel then
       table.insert(availableItems, {
         name = itemName,
         label = itemConfig.label,
         basePrice = itemConfig.basePrice,
         maxAmount = itemConfig.maxAmount,
-        description = itemConfig.description
+        description = itemConfig.description,
+        image = itemConfig.image
       })
     end
   end
@@ -299,6 +319,7 @@ local function OpenDrugSelling(data)
       playerTitle = playerTitle or 'Street Rookie',
       playerXP = playerXP,
       nextLevelXP = nextLevelXP or 0,
+      debug = (Config.Debug and Config.Debug.enabled and Config.Debug.printToConsole) or false,
       colors = Config.UI and Config.UI.colors or nil,
       gradients = Config.UI and Config.UI.gradients or nil
     })
@@ -317,6 +338,7 @@ local function OpenDrugSelling(data)
           playerTitle = playerTitle or 'Street Rookie',
           playerXP = playerXP,
           nextLevelXP = nextLevelXP or 0,
+          debug = (Config.Debug and Config.Debug.enabled and Config.Debug.printToConsole) or false,
           colors = Config.UI and Config.UI.colors or nil,
           gradients = Config.UI and Config.UI.gradients or nil
         })
@@ -1286,6 +1308,429 @@ AddEventHandler('QBCore:Client:OnPlayerLoaded', function()
   TriggerServerEvent(Config.ResourceName..':requestPlayerStats')
 end)
 
+RegisterNetEvent('bldr-drugs:creator:sync', function(items, recipes, tables)
+  DynamicItems = items or {}
+  DynamicRecipes = recipes or {}
+  DynamicTables = tables or {}
+  creatorCache = { items = DynamicItems, recipes = DynamicRecipes, tables = DynamicTables }
+  recipeLookup = {}
+  for key, recipe in pairs(DynamicRecipes or {}) do
+    recipeLookup[key] = recipe
+  end
+  SetupCraftingTables()
+end)
+
+local function buildSelectOptionsFromMap(map)
+  local options = {}
+  for key, value in pairs(map or {}) do
+    table.insert(options, { value = key, label = (value.label or key) .. ' (' .. key .. ')' })
+  end
+  table.sort(options, function(a, b) return a.label < b.label end)
+  return options
+end
+
+local function buildSelectOptionsFromTables(tables)
+  local options = {}
+  for _, tbl in ipairs(tables or {}) do
+    local label = (tbl.label or 'Table') .. ' #' .. tostring(tbl.id or '')
+    table.insert(options, { value = tbl.id, label = label })
+  end
+  table.sort(options, function(a, b) return a.label < b.label end)
+  return options
+end
+
+local function requirementsToString(requires)
+  local parts = {}
+  for _, req in ipairs(requires or {}) do
+    table.insert(parts, tostring(req.item) .. ':' .. tostring(req.count or 1))
+  end
+  return table.concat(parts, ', ')
+end
+
+local function parseRequirements(input)
+  local results = {}
+  if not input or input == '' then return results end
+  for part in string.gmatch(input, '([^,]+)') do
+    local item, count = part:match('^%s*([^:]+)%s*:%s*(%d+)%s*$')
+    if item and count then
+      table.insert(results, { item = item, count = tonumber(count) or 1 })
+    end
+  end
+  return results
+end
+
+local function refreshCreatorCache(cb)
+  QBCore.Functions.TriggerCallback('bldr-drugs:creator:getData', function(data)
+    if data then
+      creatorCache = data
+    end
+    if cb then cb() end
+  end)
+end
+
+local function openCreatorMenu()
+  if GetResourceState('ox_lib') ~= 'started' then
+    CustomNotify('ox_lib is required for the creator menu.', 'error')
+    return
+  end
+
+  refreshCreatorCache(function()
+    lib.registerContext({
+      id = 'bldr_drug_creator_main',
+      title = 'BLDR Drugs - Admin Creator',
+      options = {
+        {
+          title = 'Drugs',
+          description = 'Create, edit, or delete sellable drugs',
+          icon = 'pills',
+          onSelect = function()
+            lib.registerContext({
+              id = 'bldr_drug_creator_drugs',
+              title = 'Drug Creator',
+              options = {
+                {
+                  title = 'Create Drug',
+                  icon = 'plus',
+                  onSelect = function()
+                    local input = lib.inputDialog('Create Drug', {
+                      { type = 'input', label = 'Item Name (unique)', required = true },
+                      { type = 'input', label = 'Label', required = true },
+                      { type = 'number', label = 'Base Price', required = true, default = 50 },
+                      { type = 'number', label = 'Price Variation (0.2 = 20%)', required = true, default = 0.2 },
+                      { type = 'number', label = 'XP Per Unit', required = true, default = 5 },
+                      { type = 'number', label = 'Min Level', required = true, default = 0 },
+                      { type = 'number', label = 'Max Amount', required = true, default = 10 },
+                      { type = 'number', label = 'Success Chance (0-1)', required = true, default = 0.95 },
+                      { type = 'number', label = 'Police Penalty (0-1)', required = true, default = 0.05 },
+                      { type = 'input', label = 'Description', required = false },
+                      { type = 'input', label = 'Image (filename/path)', required = false }
+                    })
+                    if not input then return end
+                    TriggerServerEvent('bldr-drugs:creator:saveItem', {
+                      oldName = key,
+                      name = input[1],
+                      label = input[2],
+                      basePrice = input[3],
+                      priceVariation = input[4],
+                      xpPerUnit = input[5],
+                      minLevel = input[6],
+                      maxAmount = input[7],
+                      successChance = input[8],
+                      policePenalty = input[9],
+                      description = input[10],
+                      image = input[11]
+                    })
+                    CustomNotify('Drug saved.', 'success')
+                  end
+                },
+                {
+                  title = 'Edit Drug',
+                  icon = 'pen',
+                  onSelect = function()
+                    local options = buildSelectOptionsFromMap(creatorCache.items)
+                    if #options == 0 then CustomNotify('No custom drugs found.', 'error') return end
+                    local pick = lib.inputDialog('Edit Drug', {
+                      { type = 'select', label = 'Drug', options = options, required = true }
+                    })
+                    if not pick then return end
+                    local key = pick[1]
+                    local item = creatorCache.items[key]
+                    if not item then return end
+                    local input = lib.inputDialog('Edit Drug', {
+                      { type = 'input', label = 'Item Name (unique)', required = true, default = key },
+                      { type = 'input', label = 'Label', required = true, default = item.label or key },
+                      { type = 'number', label = 'Base Price', required = true, default = item.basePrice or 0 },
+                      { type = 'number', label = 'Price Variation', required = true, default = item.priceVariation or 0.2 },
+                      { type = 'number', label = 'XP Per Unit', required = true, default = item.xpPerUnit or 0 },
+                      { type = 'number', label = 'Min Level', required = true, default = item.minLevel or 0 },
+                      { type = 'number', label = 'Max Amount', required = true, default = item.maxAmount or 1 },
+                      { type = 'number', label = 'Success Chance', required = true, default = item.successChance or 1 },
+                      { type = 'number', label = 'Police Penalty', required = true, default = item.policePenalty or 0 },
+                      { type = 'input', label = 'Description', required = false, default = item.description or '' },
+                      { type = 'input', label = 'Image (filename/path)', required = false, default = item.image or '' }
+                    })
+                    if not input then return end
+                    TriggerServerEvent('bldr-drugs:creator:saveItem', {
+                      name = input[1],
+                      label = input[2],
+                      basePrice = input[3],
+                      priceVariation = input[4],
+                      xpPerUnit = input[5],
+                      minLevel = input[6],
+                      maxAmount = input[7],
+                      successChance = input[8],
+                      policePenalty = input[9],
+                      description = input[10],
+                      image = input[11]
+                    })
+                    CustomNotify('Drug updated.', 'success')
+                  end
+                },
+                {
+                  title = 'Delete Drug',
+                  icon = 'trash',
+                  onSelect = function()
+                    local options = buildSelectOptionsFromMap(creatorCache.items)
+                    if #options == 0 then CustomNotify('No custom drugs found.', 'error') return end
+                    local pick = lib.inputDialog('Delete Drug', {
+                      { type = 'select', label = 'Drug', options = options, required = true }
+                    })
+                    if not pick then return end
+                    local confirm = lib.alertDialog({
+                      header = 'Delete Drug',
+                      content = 'Are you sure you want to delete this drug?',
+                      centered = true,
+                      cancel = true
+                    })
+                    if confirm == 'confirm' then
+                      TriggerServerEvent('bldr-drugs:creator:deleteItem', pick[1])
+                      CustomNotify('Drug deleted.', 'success')
+                    end
+                  end
+                }
+              }
+            })
+            lib.showContext('bldr_drug_creator_drugs')
+          end
+        },
+        {
+          title = 'Recipes',
+          description = 'Create, edit, or delete crafting recipes',
+          icon = 'flask',
+          onSelect = function()
+            lib.registerContext({
+              id = 'bldr_drug_creator_recipes',
+              title = 'Recipe Creator',
+              options = {
+                {
+                  title = 'Create Recipe',
+                  icon = 'plus',
+                  onSelect = function()
+                    local input = lib.inputDialog('Create Recipe', {
+                      { type = 'input', label = 'Recipe Key (unique)', required = true },
+                      { type = 'input', label = 'Label', required = true },
+                      { type = 'input', label = 'Result Item', required = true },
+                      { type = 'number', label = 'Result Count', required = true, default = 1 },
+                      { type = 'input', label = 'Requires (item:count, item2:count)', required = false },
+                      { type = 'input', label = 'Unlock Key (optional)', required = false },
+                      { type = 'number', label = 'Craft Time (ms)', required = true, default = 5000 },
+                      { type = 'input', label = 'Image (filename/path)', required = false }
+                    })
+                    if not input then return end
+                    TriggerServerEvent('bldr-drugs:creator:saveRecipe', {
+                      oldKey = key,
+                      key = input[1],
+                      label = input[2],
+                      resultItem = input[3],
+                      resultCount = input[4],
+                      requires = parseRequirements(input[5]),
+                      unlockKey = input[6],
+                      timeMs = input[7],
+                      image = input[8]
+                    })
+                    CustomNotify('Recipe saved.', 'success')
+                  end
+                },
+                {
+                  title = 'Edit Recipe',
+                  icon = 'pen',
+                  onSelect = function()
+                    local options = buildSelectOptionsFromMap(creatorCache.recipes)
+                    if #options == 0 then CustomNotify('No custom recipes found.', 'error') return end
+                    local pick = lib.inputDialog('Edit Recipe', {
+                      { type = 'select', label = 'Recipe', options = options, required = true }
+                    })
+                    if not pick then return end
+                    local key = pick[1]
+                    local recipe = creatorCache.recipes[key]
+                    if not recipe then return end
+                    local input = lib.inputDialog('Edit Recipe', {
+                      { type = 'input', label = 'Recipe Key (unique)', required = true, default = key },
+                      { type = 'input', label = 'Label', required = true, default = recipe.label or key },
+                      { type = 'input', label = 'Result Item', required = true, default = recipe.result and recipe.result.item or '' },
+                      { type = 'number', label = 'Result Count', required = true, default = recipe.result and recipe.result.count or 1 },
+                      { type = 'input', label = 'Requires (item:count, item2:count)', required = false, default = requirementsToString(recipe.requires) },
+                      { type = 'input', label = 'Unlock Key (optional)', required = false, default = recipe.unlock_key or '' },
+                      { type = 'number', label = 'Craft Time (ms)', required = true, default = recipe.time_ms or 5000 },
+                      { type = 'input', label = 'Image (filename/path)', required = false, default = recipe.image or '' }
+                    })
+                    if not input then return end
+                    TriggerServerEvent('bldr-drugs:creator:saveRecipe', {
+                      key = input[1],
+                      label = input[2],
+                      resultItem = input[3],
+                      resultCount = input[4],
+                      requires = parseRequirements(input[5]),
+                      unlockKey = input[6],
+                      timeMs = input[7],
+                      image = input[8]
+                    })
+                    CustomNotify('Recipe updated.', 'success')
+                  end
+                },
+                {
+                  title = 'Delete Recipe',
+                  icon = 'trash',
+                  onSelect = function()
+                    local options = buildSelectOptionsFromMap(creatorCache.recipes)
+                    if #options == 0 then CustomNotify('No custom recipes found.', 'error') return end
+                    local pick = lib.inputDialog('Delete Recipe', {
+                      { type = 'select', label = 'Recipe', options = options, required = true }
+                    })
+                    if not pick then return end
+                    local confirm = lib.alertDialog({
+                      header = 'Delete Recipe',
+                      content = 'Are you sure you want to delete this recipe?',
+                      centered = true,
+                      cancel = true
+                    })
+                    if confirm == 'confirm' then
+                      TriggerServerEvent('bldr-drugs:creator:deleteRecipe', pick[1])
+                      CustomNotify('Recipe deleted.', 'success')
+                    end
+                  end
+                }
+              }
+            })
+            lib.showContext('bldr_drug_creator_recipes')
+          end
+        },
+        {
+          title = 'Tables',
+          description = 'Place and manage crafting tables',
+          icon = 'table',
+          onSelect = function()
+            lib.registerContext({
+              id = 'bldr_drug_creator_tables',
+              title = 'Table Manager',
+              options = {
+                {
+                  title = 'Create Table Here',
+                  icon = 'plus',
+                  onSelect = function()
+                    local ped = PlayerPedId()
+                    local coords = GetEntityCoords(ped)
+                    local heading = GetEntityHeading(ped)
+                    local presetOptions = (Config.Creator and Config.Creator.propPresets) or {}
+                    table.insert(presetOptions, { label = 'Custom', value = '__custom__' })
+                    local input = lib.inputDialog('Create Table', {
+                      { type = 'input', label = 'Label', required = true, default = 'Drug Lab Table' },
+                      { type = 'select', label = 'Prop Preset', required = true, options = presetOptions, default = '' },
+                      { type = 'input', label = 'Custom Prop Model (optional)', required = false },
+                      { type = 'number', label = 'Heading (optional)', required = false, default = heading }
+                    })
+                    if not input then return end
+                    local propValue = input[2]
+                    local propModel = ''
+                    if propValue == '__custom__' then
+                      propModel = input[3] or ''
+                    else
+                      propModel = propValue or ''
+                    end
+                    TriggerServerEvent('bldr-drugs:creator:saveTable', {
+                      label = input[1],
+                      prop = propModel,
+                      heading = input[4],
+                      coords = { x = coords.x, y = coords.y, z = coords.z }
+                    })
+                    CustomNotify('Table created.', 'success')
+                  end
+                },
+                {
+                  title = 'Edit Table',
+                  icon = 'pen',
+                  onSelect = function()
+                    local options = buildSelectOptionsFromTables(creatorCache.tables)
+                    if #options == 0 then CustomNotify('No tables found.', 'error') return end
+                    local pick = lib.inputDialog('Edit Table', {
+                      { type = 'select', label = 'Table', options = options, required = true }
+                    })
+                    if not pick then return end
+                    local id = pick[1]
+                    local tableData = nil
+                    for _, tbl in ipairs(creatorCache.tables or {}) do
+                      if tbl.id == id then tableData = tbl break end
+                    end
+                    if not tableData then return end
+                    local presetOptions = (Config.Creator and Config.Creator.propPresets) or {}
+                    table.insert(presetOptions, { label = 'Custom', value = '__custom__' })
+                    local input = lib.inputDialog('Edit Table', {
+                      { type = 'input', label = 'Label', required = true, default = tableData.label or 'Drug Lab Table' },
+                      { type = 'select', label = 'Prop Preset', required = true, options = presetOptions, default = tableData.prop or '' },
+                      { type = 'input', label = 'Custom Prop Model (optional)', required = false, default = tableData.prop or '' },
+                      { type = 'number', label = 'Heading', required = false, default = tableData.heading or 0 },
+                      { type = 'checkbox', label = 'Move to my position', checked = false }
+                    })
+                    if not input then return end
+                    local coords = tableData.coords
+                    if input[4] then
+                      local ped = PlayerPedId()
+                      local pos = GetEntityCoords(ped)
+                      coords = { x = pos.x, y = pos.y, z = pos.z }
+                    end
+                    local propValue = input[2]
+                    local propModel = ''
+                    if propValue == '__custom__' then
+                      propModel = input[3] or ''
+                    else
+                      propModel = propValue or ''
+                    end
+                    TriggerServerEvent('bldr-drugs:creator:saveTable', {
+                      id = id,
+                      label = input[1],
+                      prop = propModel,
+                      heading = input[4],
+                      coords = { x = coords.x, y = coords.y, z = coords.z }
+                    })
+                    CustomNotify('Table updated.', 'success')
+                  end
+                },
+                {
+                  title = 'Delete Table',
+                  icon = 'trash',
+                  onSelect = function()
+                    local options = buildSelectOptionsFromTables(creatorCache.tables)
+                    if #options == 0 then CustomNotify('No tables found.', 'error') return end
+                    local pick = lib.inputDialog('Delete Table', {
+                      { type = 'select', label = 'Table', options = options, required = true }
+                    })
+                    if not pick then return end
+                    local confirm = lib.alertDialog({
+                      header = 'Delete Table',
+                      content = 'Are you sure you want to delete this table?',
+                      centered = true,
+                      cancel = true
+                    })
+                    if confirm == 'confirm' then
+                      TriggerServerEvent('bldr-drugs:creator:deleteTable', pick[1])
+                      CustomNotify('Table deleted.', 'success')
+                    end
+                  end
+                }
+              }
+            })
+            lib.showContext('bldr_drug_creator_tables')
+          end
+        },
+        {
+          title = 'Resync Data',
+          description = 'Reload creator data from server',
+          icon = 'rotate',
+          onSelect = function()
+            TriggerServerEvent('bldr-drugs:creator:requestSync')
+            CustomNotify('Sync requested.', 'info')
+          end
+        }
+      }
+    })
+    lib.showContext('bldr_drug_creator_main')
+  end)
+end
+
+RegisterNetEvent('bldr-drugs:openCreator', function()
+  openCreatorMenu()
+end)
+
 -- NUI Callbacks (registered early to ensure availability)
 RegisterNUICallback('getAvailableItems', function(data, cb)
   debugPrint("NUI callback: getAvailableItems requested")
@@ -1390,6 +1835,39 @@ RegisterCommand('bldr_debug_npcs', function()
   end
 end)
 
+-- Test prop loading/spawn (admin/dev)
+RegisterCommand('bldr_testprop', function(_, args)
+  local modelName = args[1]
+  if not modelName or modelName == '' then
+    CustomNotify('Usage: /bldr_testprop [modelname]', 'error')
+    return
+  end
+
+  local modelHash = GetHashKey(modelName)
+  local inCd = IsModelInCdimage(modelHash)
+  local isValid = IsModelValid(modelHash)
+  print('[bldr-drugs] TestProp:', modelName, 'hash', modelHash, 'inCdimage', inCd, 'valid', isValid)
+
+  RequestModel(modelHash)
+  local timeout = GetGameTimer() + 5000
+  while not HasModelLoaded(modelHash) and GetGameTimer() < timeout do
+    Wait(50)
+  end
+
+  if not HasModelLoaded(modelHash) then
+    CustomNotify(('Failed to load model: %s'):format(modelName), 'error')
+    return
+  end
+
+  local ped = PlayerPedId()
+  local coords = GetEntityCoords(ped)
+  local prop = CreateObject(modelHash, coords.x, coords.y, coords.z - 1.0, false, false, false)
+  SetEntityHeading(prop, GetEntityHeading(ped))
+  FreezeEntityPosition(prop, true)
+  SetModelAsNoLongerNeeded(modelHash)
+  CustomNotify(('Spawned prop: %s'):format(modelName), 'success')
+end)
+
 -- Emergency command to fix stuck NUI focus
 RegisterCommand('bldr_fix_ui', function()
   SetNuiFocus(false, false)
@@ -1436,6 +1914,7 @@ RegisterCommand('bldr_test_nui', function()
     playerTitle = playerTitle or 'Street Rookie',
     playerXP = playerXP or 0,
     nextLevelXP = 100,
+    debug = (Config.Debug and Config.Debug.enabled and Config.Debug.printToConsole) or false,
     colors = Config.UI and Config.UI.colors or nil,
     gradients = Config.UI and Config.UI.gradients or nil
   })
@@ -1738,7 +2217,7 @@ end)
 -- === EVOLUTION CRAFTING TABLE SYSTEM ===
 
 -- Crafting table locations (you can add more)
-local craftingTables = {
+local baseCraftingTables = {
   {
     coords = vector3(1375.8, 3602.01, 34.88), -- Updated location
     label = "Drug Lab Table",
@@ -1748,57 +2227,199 @@ local craftingTables = {
   -- { coords = vector3(x, y, z), label = "Another Lab", prop = "prop_name" }
 }
 
--- Initialize crafting tables
-Citizen.CreateThread(function()
-  if not Config.Evolution or not Config.Evolution.enabled then return end
-  
-  for i, table in ipairs(craftingTables) do
-    -- Optionally spawn a prop
-    if table.prop then
-      local prop = CreateObject(GetHashKey(table.prop), table.coords.x, table.coords.y, table.coords.z - 1.0, false, false, false)
-      SetEntityHeading(prop, 0.0)
-      FreezeEntityPosition(prop, true)
-      debugPrint("Spawned crafting table prop at", table.coords)
+local craftingZones = {}
+local spawnedCraftingProps = {}
+
+local function GetAllCraftingTables()
+  local merged = {}
+  for _, t in ipairs(baseCraftingTables or {}) do
+    table.insert(merged, t)
+  end
+  for _, t in ipairs(DynamicTables or {}) do
+    table.insert(merged, t)
+  end
+  return merged
+end
+
+local function CleanupCraftingTables()
+  for _, prop in pairs(spawnedCraftingProps) do
+    if DoesEntityExist(prop) then
+      DeleteEntity(prop)
     end
-    
-    -- Add qb-target interaction
-    if Config.ThirdEye.enabled and Config.ThirdEye.useQBTarget then
-      exports['qb-target']:AddBoxZone("crafting_table_" .. i, table.coords, 2.0, 2.0, {
-        name = "crafting_table_" .. i,
-        heading = 0,
-        minZ = table.coords.z - 1,
-        maxZ = table.coords.z + 1,
+  end
+  spawnedCraftingProps = {}
+
+  for _, zone in ipairs(craftingZones) do
+    if zone.type == 'qb' and GetResourceState('qb-target') == 'started' then
+      exports['qb-target']:RemoveZone(zone.id)
+    elseif zone.type == 'ox' and GetResourceState('ox_target') == 'started' then
+      exports.ox_target:removeZone(zone.id)
+    end
+  end
+  craftingZones = {}
+end
+
+SetupCraftingTables = function()
+  if not Config.Evolution or not Config.Evolution.enabled then return end
+  CleanupCraftingTables()
+
+  local tables = GetAllCraftingTables()
+  for i, tableData in ipairs(tables) do
+    local coords = tableData.coords
+    if coords and coords.x then
+      coords = vector3(coords.x, coords.y, coords.z)
+    end
+
+    -- Optionally spawn a prop
+    if tableData.prop and tableData.prop ~= '' then
+      local modelHash = GetHashKey(tableData.prop)
+      RequestModel(modelHash)
+      local timeout = GetGameTimer() + 5000
+      while not HasModelLoaded(modelHash) and GetGameTimer() < timeout do
+        Wait(50)
+      end
+
+      if HasModelLoaded(modelHash) then
+        local prop = CreateObject(modelHash, coords.x, coords.y, coords.z - 1.0, false, false, false)
+        SetEntityHeading(prop, tableData.heading or 0.0)
+        FreezeEntityPosition(prop, true)
+        spawnedCraftingProps[#spawnedCraftingProps + 1] = prop
+        debugPrint("Spawned crafting table prop at", coords)
+        SetModelAsNoLongerNeeded(modelHash)
+      else
+        debugPrint("Failed to load prop model:", tableData.prop)
+        CustomNotify(('Failed to load prop: %s (check streaming/resource start)'):format(tableData.prop), 'error', 4000)
+      end
+    end
+
+    -- Add targeting interaction
+    if Config.ThirdEye.enabled and Config.ThirdEye.useQBTarget and GetResourceState('qb-target') == 'started' then
+      local zoneName = "crafting_table_" .. i
+      exports['qb-target']:AddBoxZone(zoneName, coords, 2.0, 2.0, {
+        name = zoneName,
+        heading = tableData.heading or 0,
+        minZ = coords.z - 1,
+        maxZ = coords.z + 1,
       }, {
         options = {
           {
             type = "client",
             event = "bldr-drugs:openCraftingMenu",
             icon = "fas fa-flask",
-            label = table.label,
+            label = tableData.label or "Craft Drugs",
           }
         },
         distance = 2.0
       })
+      craftingZones[#craftingZones + 1] = { type = 'qb', id = zoneName }
       debugPrint("Added crafting table target zone", i)
+    elseif Config.ThirdEye.enabled and GetResourceState('ox_target') == 'started' then
+      local zoneId = exports.ox_target:addBoxZone({
+        coords = coords,
+        size = vec3(2.0, 2.0, 2.0),
+        rotation = tableData.heading or 0.0,
+        options = {
+          {
+            name = 'bldr_drugs_craft_' .. i,
+            icon = 'fa-solid fa-flask',
+            label = tableData.label or 'Craft Drugs',
+            onSelect = function()
+              TriggerEvent('bldr-drugs:openCraftingMenu')
+            end
+          }
+        }
+      })
+      craftingZones[#craftingZones + 1] = { type = 'ox', id = zoneId }
+      debugPrint("Added ox_target crafting zone", i)
     end
   end
+end
+
+-- Initialize crafting tables
+Citizen.CreateThread(function()
+  Wait(1000)
+  SetupCraftingTables()
 end)
 
 -- Remove crafting table targets
 function RemoveCraftingTables()
-  if not Config.ThirdEye.enabled or not Config.ThirdEye.useQBTarget then return end
-  
-  for i, _ in ipairs(craftingTables) do
-    exports['qb-target']:RemoveZone("crafting_table_" .. i)
-  end
+  CleanupCraftingTables()
   debugPrint("Removed all crafting table targets")
+end
+
+local function OpenCraftingMenuCompat(menuOptions)
+  if GetResourceState('ox_lib') == 'started' and lib and lib.registerContext and lib.showContext then
+    local contextId = 'bldr_drugs_crafting_menu'
+    local options = {}
+
+    for _, option in ipairs(menuOptions or {}) do
+      if option and option.header and option.header ~= 'Close' then
+        options[#options + 1] = {
+          title = option.header,
+          description = (option.txt or ''):gsub('<br/>', '\n'),
+          icon = 'flask',
+          onSelect = function()
+            local eventName = option.params and option.params.event
+            local eventArgs = option.params and option.params.args
+            if eventName then
+              TriggerEvent(eventName, eventArgs)
+            end
+          end
+        }
+      end
+    end
+
+    options[#options + 1] = {
+      title = 'Close',
+      icon = 'xmark',
+      onSelect = function()
+        if lib and lib.hideContext then
+          lib.hideContext(true)
+        end
+      end
+    }
+
+    lib.registerContext({
+      id = contextId,
+      title = 'Drug Crafting',
+      options = options
+    })
+    lib.showContext(contextId)
+    return true
+  end
+
+  if GetResourceState('qb-menu') == 'started' then
+    local ok = pcall(function()
+      exports['qb-menu']:openMenu(menuOptions)
+    end)
+    if ok then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function CloseCraftingMenuCompat()
+  if GetResourceState('ox_lib') == 'started' and lib and lib.hideContext then
+    lib.hideContext(true)
+    return
+  end
+
+  if GetResourceState('qb-menu') == 'started' then
+    pcall(function()
+      exports['qb-menu']:closeMenu()
+    end)
+  end
 end
 
 -- Open crafting menu event
 RegisterNetEvent('bldr-drugs:openCraftingMenu', function()
-  if not Config.Evolution or not Config.Evolution.enabled then 
-    CustomNotify("Evolution system is disabled", "error")
-    return 
+  if not Config.Evolution or not Config.Evolution.enabled then
+    if not DynamicRecipes or next(DynamicRecipes) == nil then
+      CustomNotify("Evolution system is disabled", "error")
+      return
+    end
   end
   
   -- Get available recipes
@@ -1810,7 +2431,9 @@ RegisterNetEvent('bldr-drugs:openCraftingMenu', function()
     
     -- Create menu options
     local menuOptions = {}
+    recipeLookup = {}
     for _, recipe in ipairs(recipes) do
+      recipeLookup[recipe.key] = recipe
       local requirementText = ""
       for i, req in ipairs(recipe.requires or {}) do
         if i > 1 then requirementText = requirementText .. ", " end
@@ -1839,7 +2462,10 @@ RegisterNetEvent('bldr-drugs:openCraftingMenu', function()
     })
     
     -- Open menu
-    exports['qb-menu']:openMenu(menuOptions)
+    local opened = OpenCraftingMenuCompat(menuOptions)
+    if not opened then
+      CustomNotify("No compatible menu system found (need ox_lib or qb-menu)", "error")
+    end
   end)
 end)
 
@@ -1849,11 +2475,11 @@ RegisterNetEvent('bldr-drugs:startCrafting', function(data)
   if not recipeKey then return end
   
   -- Get recipe details for progress bar
-  local recipe = Config.Evolution.recipes[recipeKey]
+  local recipe = (recipeLookup and recipeLookup[recipeKey]) or (Config.Evolution.recipes and Config.Evolution.recipes[recipeKey])
   if not recipe then return end
   
   -- Close menu
-  exports['qb-menu']:closeMenu()
+  CloseCraftingMenuCompat()
   
   -- Show progress bar
   QBCore.Functions.Progressbar("drug_crafting", "Crafting " .. (recipe.label or "evolved drug") .. "...", recipe.time_ms or 5000, false, true, {

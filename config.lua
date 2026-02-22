@@ -3,17 +3,32 @@ Config = {}
 -- Resource name used in events and DB table prefixes
 Config.ResourceName = 'bldr-drugs'
 
+-- Admin Creator (in-game drug/table/recipe editor)
+Config.Creator = {
+  enabled = true,
+  command = 'drugcreator',
+  adminGroups = {'admin', 'god'}, -- QBCore permission groups
+  useAce = false,
+  acePerm = 'bldr.drugcreator',
+  propPresets = {
+    { label = 'None', value = '' },
+    { label = 'Gas Tank', value = 'gas_tank' },
+    { label = 'Table Tree', value = 'table_tree' },
+    { label = 'Meth Table', value = 'bkr_prop_meth_table01a' }
+  }
+}
+
 -- Debug settings
 Config.Debug = {
   enabled = false,          -- Master debug toggle - set to true to enable debug output
-  showNPCs = true,        -- Show NPC debug info
-  showSales = true,       -- Show sale transactions
-  showSpawning = true,    -- Show NPC spawning/despawning
-  showInteractions = true,-- Show player-NPC interactions
-  showPolice = true,      -- Show police detection
-  showXP = true,          -- Show XP calculations
-  drawMarkers = true,     -- Draw 3D markers for NPCs
-  printToConsole = true,  -- Print debug to server console
+  showNPCs = false,       -- Show NPC debug info
+  showSales = false,      -- Show sale transactions
+  showSpawning = false,   -- Show NPC spawning/despawning
+  showInteractions = false,-- Show player-NPC interactions
+  showPolice = false,     -- Show police detection
+  showXP = false,         -- Show XP calculations
+  drawMarkers = false,    -- Draw 3D markers for NPCs
+  printToConsole = false, -- Print debug to server console
   printToChat = false     -- Print debug to player chat
 }
 
@@ -33,7 +48,36 @@ Config.Money = {
 -- [NEW] Robbery System Configuration
 Config.Robbery = {
   enabled = true,           -- Enable robbery system
+  selectedPreset = 'medium', -- 'easy', 'medium', 'hard', or 'custom'
   chance = 15,              -- Percent chance of robbery instead of normal sale (0-100)
+
+  -- Quick balancing presets (applied automatically from selectedPreset)
+  presets = {
+    easy = {
+      chance = 8,                 -- Lower robbery frequency
+      maxCashStolenPercent = 15,  -- Lower cash theft impact
+      fleeChance = 75,            -- Robbers flee often
+      fleeHealthPercent = 55,     -- Robbers flee earlier in combat
+      attackPlayer = false,
+      fightBackIfAttacked = false,
+    },
+    medium = {
+      chance = 15,
+      maxCashStolenPercent = 30,
+      fleeChance = 40,
+      fleeHealthPercent = 30,
+      attackPlayer = false,
+      fightBackIfAttacked = true,
+    },
+    hard = {
+      chance = 25,                -- Higher robbery frequency
+      maxCashStolenPercent = 45,  -- Higher cash theft impact
+      fleeChance = 20,            -- Robbers are less likely to flee
+      fleeHealthPercent = 15,     -- Robbers fight longer before fleeing
+      attackPlayer = true,
+      fightBackIfAttacked = true,
+    },
+  },
   
   -- Robber NPC Configuration (these models are also blacklisted from selling)
   robberModels = {
@@ -101,6 +145,27 @@ Config.Robbery = {
   robberyInSafeZones = false,   -- Allow robberies in safe zones (blacklisted areas)
   cancelSaleOnRobbery = true,   -- If true, sale is canceled. If false, sale proceeds but you get robbed too
 }
+
+-- Apply robbery preset values to core tuning fields.
+-- Set selectedPreset = 'custom' to keep manual values above.
+do
+  local robbery = Config.Robbery
+  local presetKey = tostring(robbery and robbery.selectedPreset or 'custom'):lower()
+
+  if robbery and presetKey ~= 'custom' then
+    local preset = robbery.presets and robbery.presets[presetKey]
+    if preset then
+      if preset.chance ~= nil then robbery.chance = preset.chance end
+      if preset.maxCashStolenPercent ~= nil and robbery.maxCashStolen then
+        robbery.maxCashStolen.percent = preset.maxCashStolenPercent
+      end
+      if preset.fleeChance ~= nil then robbery.fleeChance = preset.fleeChance end
+      if preset.fleeHealthPercent ~= nil then robbery.fleeHealthPercent = preset.fleeHealthPercent end
+      if preset.attackPlayer ~= nil then robbery.attackPlayer = preset.attackPlayer end
+      if preset.fightBackIfAttacked ~= nil then robbery.fightBackIfAttacked = preset.fightBackIfAttacked end
+    end
+  end
+end
 
 -- Police detection radius (units)
 Config.PoliceRadius = 200.0
@@ -194,11 +259,11 @@ Config.Items = {
   -- Format: ['item_name'] = { config }
   ['weed'] = {
     label = 'Weed',
-    basePrice = 50,           -- Base price per unit
+    basePrice = 42,           -- Base price per unit
     priceVariation = 0.2,     -- Price can vary +/- 20%
-    xpPerUnit = 5,            -- XP gained per unit sold
+    xpPerUnit = 4,            -- XP gained per unit sold
     minLevel = 0,             -- Minimum level required to sell
-    maxAmount = 50,           -- Maximum amount that can be sold at once
+    maxAmount = 40,           -- Maximum amount that can be sold at once
     successChance = 0.95,     -- Base success chance (before police modifier)
     policePenalty = 0.05,     -- Success chance reduction per nearby cop
     description = 'High quality street weed'
@@ -206,11 +271,11 @@ Config.Items = {
   
   ['cocaine'] = {
     label = 'Cocaine',
-    basePrice = 120,
+    basePrice = 105,
     priceVariation = 0.25,
-    xpPerUnit = 8,
+    xpPerUnit = 7,
     minLevel = 2,
-    maxAmount = 25,
+    maxAmount = 20,
     successChance = 0.85,
     policePenalty = 0.08,
     description = 'Pure Colombian powder'
@@ -218,11 +283,11 @@ Config.Items = {
   
   ['heroin'] = {
     label = 'Heroin',
-    basePrice = 200,
+    basePrice = 170,
     priceVariation = 0.3,
-    xpPerUnit = 12,
+    xpPerUnit = 10,
     minLevel = 4,
-    maxAmount = 15,
+    maxAmount = 12,
     successChance = 0.75,
     policePenalty = 0.12,
     description = 'High grade black tar'
@@ -230,11 +295,11 @@ Config.Items = {
   
   ['meth'] = {
     label = 'Meth',
-    basePrice = 180,
+    basePrice = 155,
     priceVariation = 0.25,
-    xpPerUnit = 10,
+    xpPerUnit = 9,
     minLevel = 3,
-    maxAmount = 20,
+    maxAmount = 16,
     successChance = 0.80,
     policePenalty = 0.10,
     description = 'Crystal blue persuasion'
@@ -242,11 +307,11 @@ Config.Items = {
   
   ['xtc'] = {
     label = 'Ecstasy',
-    basePrice = 80,
+    basePrice = 70,
     priceVariation = 0.2,
-    xpPerUnit = 6,
+    xpPerUnit = 5,
     minLevel = 1,
-    maxAmount = 30,
+    maxAmount = 24,
     successChance = 0.90,
     policePenalty = 0.06,
     description = 'Party pills for the night'
@@ -255,11 +320,11 @@ Config.Items = {
   -- EVOLVED DRUGS (Higher tier, better prices)
   ['evo_weed_chronic'] = {
     label = 'Chronic Kush',
-    basePrice = 85,           -- 70% more than regular weed
+    basePrice = 68,           -- premium over regular weed
     priceVariation = 0.15,    -- Less variation (premium product)
-    xpPerUnit = 8,            -- 60% more XP
+    xpPerUnit = 6,
     minLevel = 1,             -- Requires some experience
-    maxAmount = 40,
+    maxAmount = 28,
     successChance = 0.96,     -- Higher success rate
     policePenalty = 0.04,     -- Less police attention
     description = 'Premium evolved cannabis strain'
@@ -267,11 +332,11 @@ Config.Items = {
 
   ['evo_cocaine_pure'] = {
     label = 'Pure Colombian',
-    basePrice = 200,          -- 67% more than regular cocaine
+    basePrice = 165,
     priceVariation = 0.2,
-    xpPerUnit = 12,           -- 50% more XP
+    xpPerUnit = 10,
     minLevel = 3,             -- Higher level requirement
-    maxAmount = 20,
+    maxAmount = 15,
     successChance = 0.88,     -- Slightly better success
     policePenalty = 0.07,     -- Slightly less police penalty
     description = 'Pharmaceutical grade cocaine'
@@ -279,15 +344,32 @@ Config.Items = {
 
   ['evo_meth_l1'] = {
     label = 'Blue Crystal',
-    basePrice = 300,          -- 67% more than regular meth
+    basePrice = 235,
     priceVariation = 0.2,
-    xpPerUnit = 15,           -- 50% more XP
+    xpPerUnit = 12,
     minLevel = 4,             -- High level requirement
-    maxAmount = 15,
+    maxAmount = 10,
     successChance = 0.83,     -- Better success rate
     policePenalty = 0.08,     -- Slightly less police attention
     description = 'Laboratory grade methamphetamine'
   }
+}
+
+-- Economy tuning and anti-inflation controls
+Config.Economy = {
+  globalPriceMultiplier = 0.92, -- Applied to all sale payouts after level multiplier
+  xpMultiplier = 0.9,           -- Applied to all XP gains from sales
+  maxPayoutPerSale = 8500,      -- Hard cap to prevent extreme payout spikes
+  maxXPGainPerSale = 250         -- Hard cap for XP per successful sale
+}
+
+-- Server-side sale validation hardening
+Config.Security = {
+  enabled = true,
+  maxClientCoordOffset = 20.0,  -- Reject sales if client-provided coords are too far from player
+  maxItemNameLength = 64,
+  minFinalPrice = 1,
+  rejectInvalidCoords = true
 }
 
 -- DB table names

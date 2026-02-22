@@ -10,6 +10,11 @@ local playerXP = {} -- in-memory cache: citizenid -> xp
 local tokenStore = {} -- token -> {source, expires}
 local sellHistory = {} -- source -> {timestamps...} used for rate limiting
 
+-- Admin creator (custom items/recipes/tables)
+local CustomItems = {}
+local CustomRecipes = {}
+local CustomTables = {}
+
 -- Evolution system table
 local BLDR_Evolution = {}
 
@@ -27,6 +32,12 @@ local function debugPrint(category, ...)
     if categoryEnabled and Config.Debug.printToConsole then
       print('[bldr-drugs][' .. string.upper(category) .. ']', ...)
     end
+  end
+end
+
+local function debugConsole(...)
+  if Config.Debug and Config.Debug.enabled and Config.Debug.printToConsole then
+    print(...)
   end
 end
 
@@ -56,10 +67,15 @@ local function ensureTables()
       amount INT,
       base_price INT,
       final_price INT,
+      reward_type VARCHAR(32),
+      unit_price INT,
+      variation_multiplier DOUBLE,
+      level_multiplier DOUBLE,
       xpEarned INT,
       level_before INT,
       level_after INT,
       success TINYINT(1),
+      robbery_triggered TINYINT(1) DEFAULT 0,
       reason VARCHAR(250),
       x DOUBLE,
       y DOUBLE,
@@ -91,7 +107,174 @@ local function ensureTables()
 
   exports.oxmysql:execute(createLogs, function(affected)
     debugPrint('general', 'ensureTables Logs result', affected)
+
+    local logAlterQueries = {
+      ("ALTER TABLE %s ADD COLUMN IF NOT EXISTS reward_type VARCHAR(32);"):format(logsTable),
+      ("ALTER TABLE %s ADD COLUMN IF NOT EXISTS unit_price INT;"):format(logsTable),
+      ("ALTER TABLE %s ADD COLUMN IF NOT EXISTS variation_multiplier DOUBLE;"):format(logsTable),
+      ("ALTER TABLE %s ADD COLUMN IF NOT EXISTS level_multiplier DOUBLE;"):format(logsTable),
+      ("ALTER TABLE %s ADD COLUMN IF NOT EXISTS robbery_triggered TINYINT(1) DEFAULT 0;"):format(logsTable)
+    }
+
+    for _, query in pairs(logAlterQueries) do
+      exports.oxmysql:execute(query, function(result)
+        debugPrint('general', 'ALTER LOGS TABLE result:', result)
+      end)
+    end
   end)
+end
+
+-- Admin creator tables
+local function ensureCreatorTables()
+  local createItems = [[
+    CREATE TABLE IF NOT EXISTS bldr_drug_items (
+      name VARCHAR(100) NOT NULL PRIMARY KEY,
+      label VARCHAR(100),
+      base_price INT DEFAULT 0,
+      price_variation DOUBLE DEFAULT 0.2,
+      xp_per_unit INT DEFAULT 0,
+      min_level INT DEFAULT 0,
+      max_amount INT DEFAULT 1,
+      success_chance DOUBLE DEFAULT 1,
+      police_penalty DOUBLE DEFAULT 0,
+      description TEXT,
+      image VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    );
+  ]]
+
+  local createRecipes = [[
+    CREATE TABLE IF NOT EXISTS bldr_drug_recipes (
+      key_name VARCHAR(100) NOT NULL PRIMARY KEY,
+      label VARCHAR(100),
+      result_item VARCHAR(100),
+      result_count INT DEFAULT 1,
+      requires_json LONGTEXT,
+      unlock_key VARCHAR(100),
+      time_ms INT DEFAULT 5000,
+      image VARCHAR(255),
+      enabled TINYINT(1) DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    );
+  ]]
+
+  local createTables = [[
+    CREATE TABLE IF NOT EXISTS bldr_drug_tables (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      label VARCHAR(100),
+      x DOUBLE,
+      y DOUBLE,
+      z DOUBLE,
+      heading DOUBLE DEFAULT 0,
+      prop_model VARCHAR(100),
+      enabled TINYINT(1) DEFAULT 1,
+      meta_json LONGTEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    );
+  ]]
+
+  exports.oxmysql:execute(createItems)
+  exports.oxmysql:execute(createRecipes)
+  exports.oxmysql:execute(createTables)
+end
+
+local function syncCreatorData(target)
+  TriggerClientEvent('bldr-drugs:creator:sync', target or -1, CustomItems, CustomRecipes, CustomTables)
+end
+
+local function loadCreatorData(cb)
+  CustomItems = {}
+  CustomRecipes = {}
+  CustomTables = {}
+
+  local pending = 3
+  local function done()
+    pending = pending - 1
+    if pending <= 0 then
+      if cb then cb() end
+    end
+  end
+
+  exports.oxmysql:query('SELECT * FROM bldr_drug_items', {}, function(rows)
+    for _, row in ipairs(rows or {}) do
+      local name = row.name
+      if name and name ~= '' then
+        CustomItems[name] = {
+          label = row.label or name,
+          basePrice = tonumber(row.base_price) or 0,
+          priceVariation = tonumber(row.price_variation) or 0.2,
+          xpPerUnit = tonumber(row.xp_per_unit) or 0,
+          minLevel = tonumber(row.min_level) or 0,
+          maxAmount = tonumber(row.max_amount) or 1,
+          successChance = tonumber(row.success_chance) or 1,
+          policePenalty = tonumber(row.police_penalty) or 0,
+          description = row.description or '',
+          image = row.image or nil
+        }
+      end
+    end
+    done()
+  end)
+
+  exports.oxmysql:query('SELECT * FROM bldr_drug_recipes WHERE enabled = 1', {}, function(rows)
+    for _, row in ipairs(rows or {}) do
+      local key = row.key_name
+      if key and key ~= '' then
+        local requires = {}
+        if row.requires_json and row.requires_json ~= '' then
+          local ok, decoded = pcall(json.decode, row.requires_json)
+          if ok and type(decoded) == 'table' then requires = decoded end
+        end
+        CustomRecipes[key] = {
+          label = row.label or key,
+          result = { item = row.result_item, count = tonumber(row.result_count) or 1 },
+          requires = requires,
+          unlock_key = row.unlock_key or nil,
+          time_ms = tonumber(row.time_ms) or 5000,
+          image = row.image or nil,
+          enabled = (row.enabled == 1)
+        }
+      end
+    end
+    done()
+  end)
+
+  exports.oxmysql:query('SELECT * FROM bldr_drug_tables WHERE enabled = 1', {}, function(rows)
+    for _, row in ipairs(rows or {}) do
+      local coords = { x = tonumber(row.x) or 0, y = tonumber(row.y) or 0, z = tonumber(row.z) or 0 }
+      local meta = {}
+      if row.meta_json and row.meta_json ~= '' then
+        local ok, decoded = pcall(json.decode, row.meta_json)
+        if ok and type(decoded) == 'table' then meta = decoded end
+      end
+      table.insert(CustomTables, {
+        id = tonumber(row.id),
+        label = row.label or 'Drug Lab Table',
+        coords = coords,
+        heading = tonumber(row.heading) or 0.0,
+        prop = row.prop_model or nil,
+        meta = meta
+      })
+    end
+    done()
+  end)
+end
+
+local function isAdmin(src)
+  if Config.Creator and Config.Creator.useAce and Config.Creator.acePerm then
+    if IsPlayerAceAllowed(src, Config.Creator.acePerm) then return true end
+  end
+  if Config.Creator and Config.Creator.adminGroups then
+    for _, group in ipairs(Config.Creator.adminGroups) do
+      if QBCore.Functions.HasPermission(src, group) then
+        return true
+      end
+    end
+  end
+  return QBCore.Functions.HasPermission(src, 'admin')
 end
 
 -- Player XP management
@@ -129,11 +312,13 @@ local function logSale(data)
   
   exports.oxmysql:execute([[
     INSERT INTO ]] .. Config.DB.LogsTable .. [[ 
-    (citizenid, item, amount, base_price, final_price, xpEarned, level_before, level_after, success, reason, x, y, z, nearbyCops, success_chance) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (citizenid, item, amount, base_price, final_price, reward_type, unit_price, variation_multiplier, level_multiplier, xpEarned, level_before, level_after, success, robbery_triggered, reason, x, y, z, nearbyCops, success_chance) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ]], {
-    data.citizenid, data.item, data.amount, data.basePrice or 0, data.finalPrice or 0, 
-    data.xpEarned or 0, data.levelBefore or 0, data.levelAfter or 0, data.success and 1 or 0, 
+    data.citizenid, data.item, data.amount, data.basePrice or 0, data.finalPrice or 0,
+    data.rewardType or 'none', data.unitPrice or 0, data.variationMultiplier or 1.0, data.levelMultiplier or 1.0,
+    data.xpEarned or 0, data.levelBefore or 0, data.levelAfter or 0, data.success and 1 or 0,
+    data.robberyTriggered and 1 or 0,
     data.reason or '', data.x or 0, data.y or 0, data.z or 0, data.nearbyCops or 0, data.successChance or 0
   }, function(affected)
     debugPrint('sales', 'Logged sale for', data.citizenid)
@@ -142,17 +327,76 @@ end
 
 -- Item validation and pricing
 local function getItemConfig(itemName)
-  return Config.Items[itemName]
+  return (CustomItems and CustomItems[itemName]) or Config.Items[itemName]
+end
+
+local function getAllItems()
+  local merged = {}
+  for name, data in pairs(Config.Items or {}) do
+    merged[name] = data
+  end
+  for name, data in pairs(CustomItems or {}) do
+    merged[name] = data
+  end
+  return merged
+end
+
+local function isFiniteNumber(value)
+  return type(value) == 'number' and value == value and value ~= math.huge and value ~= -math.huge
+end
+
+local function sanitizeSaleCoords(src, rawCoords)
+  local ped = GetPlayerPed(src)
+  if not ped or ped == 0 then
+    return nil, 'invalid_ped'
+  end
+
+  local playerCoords = GetEntityCoords(ped)
+  local fallback = vector3(playerCoords.x, playerCoords.y, playerCoords.z)
+
+  if type(rawCoords) ~= 'table' then
+    return fallback
+  end
+
+  local x = tonumber(rawCoords.x)
+  local y = tonumber(rawCoords.y)
+  local z = tonumber(rawCoords.z)
+
+  if not isFiniteNumber(x) or not isFiniteNumber(y) or not isFiniteNumber(z) then
+    if Config.Security and Config.Security.rejectInvalidCoords then
+      return nil, 'invalid_coords'
+    end
+    return fallback
+  end
+
+  local saleCoords = vector3(x, y, z)
+  local maxOffset = (Config.Security and Config.Security.maxClientCoordOffset) or 20.0
+  if #(saleCoords - fallback) > maxOffset then
+    return nil, 'coords_offset_too_large'
+  end
+
+  return saleCoords
 end
 
 local function calculatePrice(itemConfig, amount, level, multiplier)
   local basePrice = itemConfig.basePrice * amount
   local variation = itemConfig.priceVariation or 0.2
   local variationMultiplier = 1 + (math.random() * variation * 2 - variation) -- +/- variation
-  local finalPrice = math.floor(basePrice * variationMultiplier * multiplier)
+  local globalMultiplier = (Config.Economy and Config.Economy.globalPriceMultiplier) or 1.0
+  local finalPrice = math.floor(basePrice * variationMultiplier * multiplier * globalMultiplier)
+
+  local maxPayout = Config.Economy and Config.Economy.maxPayoutPerSale
+  if maxPayout and finalPrice > maxPayout then
+    finalPrice = maxPayout
+  end
+
+  local minFinalPrice = (Config.Security and Config.Security.minFinalPrice) or 1
+  if finalPrice < minFinalPrice then
+    finalPrice = minFinalPrice
+  end
   
-  debugPrint('sales', 'Price calculation:', 'base=', basePrice, 'variation=', variationMultiplier, 'multiplier=', multiplier, 'final=', finalPrice)
-  return finalPrice, basePrice
+  debugPrint('sales', 'Price calculation:', 'base=', basePrice, 'variation=', variationMultiplier, 'multiplier=', multiplier, 'global=', globalMultiplier, 'final=', finalPrice)
+  return finalPrice, basePrice, variationMultiplier, globalMultiplier
 end
 
 -- XP and level helpers
@@ -250,6 +494,9 @@ local function createTokenForSource(source)
 end
 
 local function validateAndConsumeToken(token, source)
+  if type(token) ~= 'string' or token == '' then
+    return false, 'invalid'
+  end
   local t = tokenStore[token]
   if not t then return false, 'invalid' end
   if t.source ~= source then return false, 'mismatch' end
@@ -271,8 +518,8 @@ AddEventHandler('bdlr-drugs:server:sellWithThirdEye', function(targetEntity)
     
     -- Check if player has any sellable drugs
     local hasDrugs = false
-    for _, itemData in pairs(Config.Items) do
-        local item = Player.Functions.GetItemByName(itemData.name)
+    for itemName, _ in pairs(getAllItems()) do
+      local item = Player.Functions.GetItemByName(itemName)
         if item and item.amount > 0 then
             hasDrugs = true
             break
@@ -350,6 +597,177 @@ end)
 -- [NEW] Active robberies tracker (moved up before commands use it)
 local activeRobberies = {} -- Track active robberies: {source: {itemName, amount, alreadyGiven}}
 
+-- === ADMIN CREATOR (custom items/recipes/tables) ===
+QBCore.Functions.CreateCallback('bldr-drugs:creator:getData', function(src, cb)
+  if not isAdmin(src) then cb({ items = {}, recipes = {}, tables = {} }) return end
+  cb({ items = CustomItems, recipes = CustomRecipes, tables = CustomTables })
+end)
+
+RegisterNetEvent('bldr-drugs:creator:requestSync', function()
+  local src = source
+  if not isAdmin(src) then return end
+  syncCreatorData(src)
+end)
+
+if Config.Creator and Config.Creator.enabled then
+  QBCore.Commands.Add(Config.Creator.command or 'drugcreator', 'Open drug creator (Admin)', {}, false, function(source)
+    if not isAdmin(source) then
+      TriggerClientEvent('QBCore:Notify', source, 'You do not have permission to use the drug creator.', 'error')
+      return
+    end
+    TriggerClientEvent('bldr-drugs:openCreator', source)
+  end)
+end
+
+RegisterNetEvent('bldr-drugs:creator:saveItem', function(data)
+  local src = source
+  if not isAdmin(src) then return end
+  if not data or not data.name then return end
+
+  local name = string.lower(tostring(data.name))
+  local oldName = data.oldName and string.lower(tostring(data.oldName)) or nil
+  local label = tostring(data.label or name)
+  local basePrice = tonumber(data.basePrice) or 0
+  local priceVariation = tonumber(data.priceVariation) or 0.2
+  local xpPerUnit = tonumber(data.xpPerUnit) or 0
+  local minLevel = tonumber(data.minLevel) or 0
+  local maxAmount = tonumber(data.maxAmount) or 1
+  local successChance = tonumber(data.successChance) or 1
+  local policePenalty = tonumber(data.policePenalty) or 0
+  local description = tostring(data.description or '')
+  local image = data.image and tostring(data.image) or nil
+
+  if oldName and oldName ~= name then
+    exports.oxmysql:execute('DELETE FROM bldr_drug_items WHERE name = ?', { oldName })
+  end
+
+  exports.oxmysql:execute([[
+    INSERT INTO bldr_drug_items
+      (name, label, base_price, price_variation, xp_per_unit, min_level, max_amount, success_chance, police_penalty, description, image)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+      label = VALUES(label),
+      base_price = VALUES(base_price),
+      price_variation = VALUES(price_variation),
+      xp_per_unit = VALUES(xp_per_unit),
+      min_level = VALUES(min_level),
+      max_amount = VALUES(max_amount),
+      success_chance = VALUES(success_chance),
+      police_penalty = VALUES(police_penalty),
+      description = VALUES(description),
+      image = VALUES(image)
+  ]], { name, label, basePrice, priceVariation, xpPerUnit, minLevel, maxAmount, successChance, policePenalty, description, image }, function()
+    loadCreatorData(function()
+      syncCreatorData()
+    end)
+  end)
+end)
+
+RegisterNetEvent('bldr-drugs:creator:deleteItem', function(name)
+  local src = source
+  if not isAdmin(src) then return end
+  if not name then return end
+  exports.oxmysql:execute('DELETE FROM bldr_drug_items WHERE name = ?', { name }, function()
+    loadCreatorData(function()
+      syncCreatorData()
+    end)
+  end)
+end)
+
+RegisterNetEvent('bldr-drugs:creator:saveRecipe', function(data)
+  local src = source
+  if not isAdmin(src) then return end
+  if not data or not data.key then return end
+
+  local key = string.lower(tostring(data.key))
+  local oldKey = data.oldKey and string.lower(tostring(data.oldKey)) or nil
+  local label = tostring(data.label or key)
+  local resultItem = tostring(data.resultItem or '')
+  local resultCount = tonumber(data.resultCount) or 1
+  local requiresJson = json.encode(data.requires or {})
+  local unlockKey = data.unlockKey and tostring(data.unlockKey) or nil
+  local timeMs = tonumber(data.timeMs) or 5000
+  local image = data.image and tostring(data.image) or nil
+
+  if oldKey and oldKey ~= key then
+    exports.oxmysql:execute('DELETE FROM bldr_drug_recipes WHERE key_name = ?', { oldKey })
+  end
+
+  exports.oxmysql:execute([[
+    INSERT INTO bldr_drug_recipes
+      (key_name, label, result_item, result_count, requires_json, unlock_key, time_ms, image, enabled)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+    ON DUPLICATE KEY UPDATE
+      label = VALUES(label),
+      result_item = VALUES(result_item),
+      result_count = VALUES(result_count),
+      requires_json = VALUES(requires_json),
+      unlock_key = VALUES(unlock_key),
+      time_ms = VALUES(time_ms),
+      image = VALUES(image),
+      enabled = 1
+  ]], { key, label, resultItem, resultCount, requiresJson, unlockKey, timeMs, image }, function()
+    loadCreatorData(function()
+      syncCreatorData()
+    end)
+  end)
+end)
+
+RegisterNetEvent('bldr-drugs:creator:deleteRecipe', function(key)
+  local src = source
+  if not isAdmin(src) then return end
+  if not key then return end
+  exports.oxmysql:execute('DELETE FROM bldr_drug_recipes WHERE key_name = ?', { key }, function()
+    loadCreatorData(function()
+      syncCreatorData()
+    end)
+  end)
+end)
+
+RegisterNetEvent('bldr-drugs:creator:saveTable', function(data)
+  local src = source
+  if not isAdmin(src) then return end
+  if not data or not data.coords then return end
+
+  local label = tostring(data.label or 'Drug Lab Table')
+  local coords = data.coords
+  local heading = tonumber(data.heading) or 0.0
+  local prop = data.prop and tostring(data.prop) or nil
+  local metaJson = data.meta and json.encode(data.meta) or nil
+
+  if data.id then
+    exports.oxmysql:execute([[
+      UPDATE bldr_drug_tables
+      SET label = ?, x = ?, y = ?, z = ?, heading = ?, prop_model = ?, meta_json = ?, enabled = 1
+      WHERE id = ?
+    ]], { label, coords.x, coords.y, coords.z, heading, prop, metaJson, data.id }, function()
+      loadCreatorData(function()
+        syncCreatorData()
+      end)
+    end)
+  else
+    exports.oxmysql:insert([[
+      INSERT INTO bldr_drug_tables (label, x, y, z, heading, prop_model, meta_json, enabled)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+    ]], { label, coords.x, coords.y, coords.z, heading, prop, metaJson }, function()
+      loadCreatorData(function()
+        syncCreatorData()
+      end)
+    end)
+  end
+end)
+
+RegisterNetEvent('bldr-drugs:creator:deleteTable', function(id)
+  local src = source
+  if not isAdmin(src) then return end
+  if not id then return end
+  exports.oxmysql:execute('DELETE FROM bldr_drug_tables WHERE id = ?', { id }, function()
+    loadCreatorData(function()
+      syncCreatorData()
+    end)
+  end)
+end)
+
 -- Test command for robbery (admin only)
 QBCore.Commands.Add('forcerobme', 'Test robbery system (Admin Only)', {}, false, function(source, args)
   local src = source
@@ -361,12 +779,12 @@ QBCore.Commands.Add('forcerobme', 'Test robbery system (Admin Only)', {}, false,
   
   -- Check what items they have (don't take yet!)
   if Config.Robbery.canStealItems then
-    for itemName, itemConfig in pairs(Config.Items) do
+    for itemName, itemConfig in pairs(getAllItems()) do
       local item = Player.Functions.GetItemByName(itemName)
       if item and item.amount > 0 then
         stolenItemAmount = math.min(item.amount, 5)
         stolenItemName = itemName
-        print("^3[BLDR-DRUGS] Found " .. stolenItemAmount .. "x " .. itemName .. " to steal^7")
+        debugConsole("^3[BLDR-DRUGS] Found " .. stolenItemAmount .. "x " .. itemName .. " to steal^7")
         break -- Only steal one item type
       end
     end
@@ -399,7 +817,7 @@ QBCore.Commands.Add('forcerobme', 'Test robbery system (Admin Only)', {}, false,
     
     -- If player already gave items peacefully, don't take again
     if robberyData.alreadyGiven then
-      print("^3[BLDR-DRUGS] Player already gave items peacefully, skipping auto-theft^7")
+      debugConsole("^3[BLDR-DRUGS] Player already gave items peacefully, skipping auto-theft^7")
       return
     end
     
@@ -408,9 +826,9 @@ QBCore.Commands.Add('forcerobme', 'Test robbery system (Admin Only)', {}, false,
       local removed = currentPlayer.Functions.RemoveItem(stolenItemName, stolenItemAmount, nil, "test-robbery")
       if removed then
         robberyData.itemsStolen = true
-        print("^2[BLDR-DRUGS] Test robbery removed " .. stolenItemAmount .. "x " .. stolenItemName .. "^7")
+        debugConsole("^2[BLDR-DRUGS] Test robbery removed " .. stolenItemAmount .. "x " .. stolenItemName .. "^7")
       else
-        print("^1[BLDR-DRUGS] Failed to remove items^7")
+        debugConsole("^1[BLDR-DRUGS] Failed to remove items^7")
       end
     end
     
@@ -423,21 +841,21 @@ QBCore.Commands.Add('forcerobme', 'Test robbery system (Admin Only)', {}, false,
         if removed then
           robberyData.cashStolen = true
           TriggerClientEvent(Config.ResourceName..':robberyStoleCash', src, stolenCash)
-          print("^2[BLDR-DRUGS] Test robbery stole $" .. stolenCash .. "^7")
+          debugConsole("^2[BLDR-DRUGS] Test robbery stole $" .. stolenCash .. "^7")
         else
-          print("^1[BLDR-DRUGS] Failed to remove cash^7")
+          debugConsole("^1[BLDR-DRUGS] Failed to remove cash^7")
         end
       else
-        print("^3[BLDR-DRUGS] Player has no cash to steal^7")
+        debugConsole("^3[BLDR-DRUGS] Player has no cash to steal^7")
       end
     end
     
     -- Send item stolen notification
     if stolenItemName and stolenItemAmount > 0 then
       TriggerClientEvent(Config.ResourceName..':robberyStoleItems', src, stolenItemName, stolenItemAmount)
-      print("^2[BLDR-DRUGS] Notified client: stole " .. stolenItemAmount .. "x " .. stolenItemName .. "^7")
+      debugConsole("^2[BLDR-DRUGS] Notified client: stole " .. stolenItemAmount .. "x " .. stolenItemName .. "^7")
     else
-      print("^3[BLDR-DRUGS] No items were stolen (player didn't have any drugs)^7")
+      debugConsole("^3[BLDR-DRUGS] No items were stolen (player didn't have any drugs)^7")
     end
   end)
 end, 'admin')
@@ -469,9 +887,9 @@ AddEventHandler(Config.ResourceName..':peacefulHandover', function()
     local removed = Player.Functions.RemoveItem(robberyData.itemName, robberyData.amount, nil, "peaceful-robbery-handover")
     if removed then
       robberyData.itemsStolen = true
-      print("^2[BLDR-DRUGS] Peaceful handover: removed " .. robberyData.amount .. "x " .. robberyData.itemName .. "^7")
+      debugConsole("^2[BLDR-DRUGS] Peaceful handover: removed " .. robberyData.amount .. "x " .. robberyData.itemName .. "^7")
     else
-      print("^1[BLDR-DRUGS] Failed to remove items during peaceful handover^7")
+      debugConsole("^1[BLDR-DRUGS] Failed to remove items during peaceful handover^7")
     end
   end
   
@@ -485,7 +903,7 @@ AddEventHandler(Config.ResourceName..':peacefulHandover', function()
       local removed = Player.Functions.RemoveMoney('cash', stolenCash, "peaceful-robbery-handover")
       if removed then
         robberyData.cashStolen = true
-        print("^2[BLDR-DRUGS] Peaceful handover: stole $" .. stolenCash .. "^7")
+        debugConsole("^2[BLDR-DRUGS] Peaceful handover: stole $" .. stolenCash .. "^7")
       end
     end
   end
@@ -583,9 +1001,27 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
     return 
   end
 
+  if type(data) ~= 'table' then
+    cb(false, {reason = 'invalid_payload'})
+    return
+  end
+
   -- Item validation
-  local itemName = tostring(data.item)
+  local itemName = tostring(data.item or '')
   local amount = tonumber(data.amount) or 0
+
+  if itemName == '' or #itemName > ((Config.Security and Config.Security.maxItemNameLength) or 64) or not string.match(itemName, '^[%w_]+$') then
+    debugPrint('sales', 'Rejected malformed item name from', src, itemName)
+    cb(false, {reason = 'invalid_item'})
+    return
+  end
+
+  if amount % 1 ~= 0 then
+    debugPrint('sales', 'Rejected non-integer amount from', src, amount)
+    cb(false, {reason = 'invalid_amount'})
+    return
+  end
+
   local itemConfig = getItemConfig(itemName)
   
   if not itemConfig then 
@@ -621,7 +1057,14 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
 
   -- Police detection
   local copsNearby = 0
-  local coords = data.coords or {}
+  local saleCoords, coordsReason = sanitizeSaleCoords(src, data.coords)
+  if not saleCoords then
+    debugPrint('sales', 'Rejected sale coords for', src, coordsReason)
+    cb(false, {reason = coordsReason or 'invalid_coords'})
+    return
+  end
+
+  local coords = { x = saleCoords.x, y = saleCoords.y, z = saleCoords.z }
   local players = QBCore.Functions.GetQBPlayers()
   
   for playerId, PolicePlayer in pairs(players) do
@@ -629,7 +1072,7 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
       local targetPed = GetPlayerPed(playerId)
       if targetPed and targetPed ~= 0 then
         local pedCoords = GetEntityCoords(targetPed)
-        local dist = #(vector3(coords.x or 0, coords.y or 0, coords.z or 0) - pedCoords)
+        local dist = #(saleCoords - pedCoords)
         if dist <= Config.PoliceRadius then
           copsNearby = copsNearby + 1
         end
@@ -645,13 +1088,14 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
   local successChance = math.max(0.1, baseChance - policePenalty) -- Minimum 10% chance
   
   -- Price calculation
-  local finalPrice, basePrice = calculatePrice(itemConfig, amount, level, multiplier)
+  local finalPrice, basePrice, variationMultiplier, globalMultiplier = calculatePrice(itemConfig, amount, level, multiplier)
   
   -- Success roll
   local rand = math.random()
   local success = rand <= successChance
   local reasonFail = nil
   local xpGain = 0
+  local rewardType = 'none'
   
   debugPrint('sales', 'Sale attempt:', 'item=', itemName, 'amount=', amount, 'chance=', successChance, 'roll=', rand, 'success=', success)
   
@@ -739,6 +1183,7 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
         local markedBillsGiven = Player.Functions.AddItem(Config.Money.markedBillsItem, finalPrice, nil, "drug-sale")
         if markedBillsGiven then
           rewardGiven = true
+          rewardType = 'markedbills'
           debugPrint('sales', 'Gave markedbills:', finalPrice, 'to player', src)
         end
       end
@@ -751,17 +1196,20 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
           if xPlayer then
             xPlayer.addAccountMoney('black_money', finalPrice)
             rewardGiven = true
+            rewardType = 'black_money'
             debugPrint('sales', 'Gave black money:', finalPrice, 'to player', src)
           end
         elseif Config.Money.type == 'crypto' then
           -- Crypto currency (if supported by your server)
           Player.Functions.AddMoney('crypto', finalPrice, "drug-sale")
           rewardGiven = true
+          rewardType = 'crypto'
           debugPrint('sales', 'Gave crypto:', finalPrice, 'to player', src)
         else
           -- Standard QBCore money types: 'cash', 'bank'
           Player.Functions.AddMoney(Config.Money.type, finalPrice, "drug-sale")
           rewardGiven = true
+          rewardType = Config.Money.type
           debugPrint('sales', 'Gave', Config.Money.type..':', finalPrice, 'to player', src)
         end
       end
@@ -769,10 +1217,19 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
       if not rewardGiven then
         -- Fallback to cash if everything else failed
         Player.Functions.AddMoney('cash', finalPrice, "drug-sale")
+        rewardType = 'cash'
         debugPrint('sales', 'Fallback: gave cash:', finalPrice, 'to player', src)
 end
       
-      xpGain = (itemConfig.xpPerUnit or 5) * amount
+      local xpMultiplier = (Config.Economy and Config.Economy.xpMultiplier) or 1.0
+      xpGain = math.floor(((itemConfig.xpPerUnit or 5) * amount) * xpMultiplier)
+      if xpGain < 1 then xpGain = 1 end
+
+      local maxXPGain = Config.Economy and Config.Economy.maxXPGainPerSale
+      if maxXPGain and xpGain > maxXPGain then
+        xpGain = maxXPGain
+      end
+
       local oldXP, newXP = addXP(cid, xpGain)
       addEarnings(cid, finalPrice)
       registerSell(src)
@@ -802,10 +1259,15 @@ end
     amount = amount,
     basePrice = basePrice,
     finalPrice = finalPrice,
+    rewardType = rewardType,
+    unitPrice = math.floor(finalPrice / math.max(amount, 1)),
+    variationMultiplier = variationMultiplier,
+    levelMultiplier = multiplier * globalMultiplier,
     xpEarned = xpGain,
     levelBefore = level,
     levelAfter = getPlayerLevel(getXP(cid)),
     success = success,
+    robberyTriggered = robberyTriggered,
     reason = reasonFail,
     x = coords.x or 0,
     y = coords.y or 0,
@@ -816,21 +1278,9 @@ end
 
   -- Prepare reward information for client notification
   local rewardInfo = {
-    type = 'none',
+    type = rewardType,
     amount = finalPrice
   }
-  
-  if success then
-    if Config.Money.useMarkedBills and math.random() <= Config.Money.markedBillsChance then
-      rewardInfo.type = 'markedbills'
-    elseif Config.Money.type == 'black_money' then
-      rewardInfo.type = 'black_money'
-    elseif Config.Money.type == 'crypto' then
-      rewardInfo.type = 'crypto'
-    else
-      rewardInfo.type = Config.Money.type
-    end
-  end
 
   debugPrint('sales', 'Preparing callback response for', src, 'success:', success, 'reason:', reasonFail)
 
@@ -1074,7 +1524,7 @@ QBCore.Commands.Add('debugunlocks', 'Debug evolution unlocks (admin)', {
     exports.oxmysql:single('SELECT unlocked FROM drug_evolution_unlocks WHERE citizenid = ? AND key_name = ?', { citizenId, key }, function(row)
       -- Use the same logic as evoIsUnlocked function
       local unlocked = row and (row.unlocked == 1 or row.unlocked == true)
-      print(string.format('[DEBUG] Player %s (%s) - Key: %s - Unlocked: %s - Raw value: %s', Player.PlayerData.charinfo.firstname, citizenId, key, tostring(unlocked), tostring(row and row.unlocked)))
+      debugConsole(string.format('[DEBUG] Player %s (%s) - Key: %s - Unlocked: %s - Raw value: %s', Player.PlayerData.charinfo.firstname, citizenId, key, tostring(unlocked), tostring(row and row.unlocked)))
       TriggerClientEvent('chat:addMessage', source, {
         color = {255, 255, 0},
         multiline = false,
@@ -1089,7 +1539,7 @@ QBCore.Commands.Add('testexactsyntax', 'Test exact evoSetUnlocked syntax (admin)
   local testCitizenId = "SYNTAX_TEST_" .. os.time()
   local testKey = "test_recipe_key"
   
-  print("[DEBUG testexactsyntax] Testing exact syntax with citizenid:", testCitizenId)
+  debugConsole("[DEBUG testexactsyntax] Testing exact syntax with citizenid:", testCitizenId)
   TriggerClientEvent('chat:addMessage', source, {
     color = {255, 255, 0},
     args = {"[SYNTAXTEST]", "Testing exact evoSetUnlocked syntax..."}
@@ -1102,13 +1552,13 @@ QBCore.Commands.Add('testexactsyntax', 'Test exact evoSetUnlocked syntax (admin)
     ON DUPLICATE KEY UPDATE unlocked = 1
   ]], { testCitizenId, testKey }, function(result, error)
     if error then
-      print("[DEBUG testexactsyntax] ERROR:", error)
+      debugConsole("[DEBUG testexactsyntax] ERROR:", error)
       TriggerClientEvent('chat:addMessage', source, {
         color = {255, 0, 0},
         args = {"[SYNTAXTEST]", "ERROR: " .. tostring(error)}
       })
     else
-      print("[DEBUG testexactsyntax] SUCCESS - insertId:", result and result.insertId, "affectedRows:", result and result.affectedRows)
+      debugConsole("[DEBUG testexactsyntax] SUCCESS - insertId:", result and result.insertId, "affectedRows:", result and result.affectedRows)
       TriggerClientEvent('chat:addMessage', source, {
         color = {0, 255, 0},
         args = {"[SYNTAXTEST]", "SUCCESS! insertId: " .. tostring(result and result.insertId)}
@@ -1119,7 +1569,7 @@ end, 'admin')
 
 -- Simple database test
 QBCore.Commands.Add('simpledbtest', 'Simple database test (admin)', {}, true, function(source, args)
-  print("[DEBUG simpledbtest] Starting simple database test...")
+  debugConsole("[DEBUG simpledbtest] Starting simple database test...")
   TriggerClientEvent('chat:addMessage', source, {
     color = {255, 255, 0},
     args = {"[SIMPLEDBTEST]", "Starting test..."}
@@ -1127,7 +1577,7 @@ QBCore.Commands.Add('simpledbtest', 'Simple database test (admin)', {}, true, fu
   
   -- Test 1: Simple SELECT from existing table
   exports.oxmysql:query('SELECT COUNT(*) as count FROM bldr_drugs LIMIT 1', {}, function(rows)
-    print("[DEBUG simpledbtest] Test 1 - bldr_drugs count:", rows and rows[1] and rows[1].count or "ERROR")
+    debugConsole("[DEBUG simpledbtest] Test 1 - bldr_drugs count:", rows and rows[1] and rows[1].count or "ERROR")
     TriggerClientEvent('chat:addMessage', source, {
       color = {0, 255, 255},
       args = {"[SIMPLEDBTEST]", "Test 1 passed - bldr_drugs accessible"}
@@ -1135,7 +1585,7 @@ QBCore.Commands.Add('simpledbtest', 'Simple database test (admin)', {}, true, fu
     
     -- Test 2: Check evolution unlocks table structure
     exports.oxmysql:query('DESCRIBE drug_evolution_unlocks', {}, function(rows2)
-      print("[DEBUG simpledbtest] Test 2 - table structure rows:", rows2 and #rows2 or "ERROR")
+      debugConsole("[DEBUG simpledbtest] Test 2 - table structure rows:", rows2 and #rows2 or "ERROR")
       TriggerClientEvent('chat:addMessage', source, {
         color = {0, 255, 255},
         args = {"[SIMPLEDBTEST]", "Test 2 passed - table structure OK"}
@@ -1150,7 +1600,7 @@ QBCore.Commands.Add('simpledbtest', 'Simple database test (admin)', {}, true, fu
       
       exports.oxmysql:insert('INSERT INTO drug_evolution_unlocks (citizenid, key_name, unlocked) VALUES (?, ?, ?)', 
         { testData.citizenid, testData.key_name, testData.unlocked }, function(result)
-        print("[DEBUG simpledbtest] Test 3 - Insert result:", result and result.insertId or "ERROR")
+        debugConsole("[DEBUG simpledbtest] Test 3 - Insert result:", result and result.insertId or "ERROR")
         TriggerClientEvent('chat:addMessage', source, {
           color = {0, 255, 0},
           args = {"[SIMPLEDBTEST]", "Test 3 passed - Insert worked! ID: " .. (result and result.insertId or "unknown")}
@@ -1162,12 +1612,12 @@ end, 'admin')
 
 -- Test database connection and table
 QBCore.Commands.Add('dbtest', 'Test database connection (admin)', {}, true, function(source, args)
-  print("[DEBUG dbtest] Testing database connection...")
+  debugConsole("[DEBUG dbtest] Testing database connection...")
   
   -- First check if table exists
   exports.oxmysql:query('SHOW TABLES LIKE "drug_evolution_unlocks"', {}, function(rows, error)
     if error then
-      print("[DEBUG dbtest] Error checking table existence:", error)
+      debugConsole("[DEBUG dbtest] Error checking table existence:", error)
       TriggerClientEvent('chat:addMessage', source, {
         color = {255, 0, 0},
         args = {"[DBTEST]", "Error checking table: " .. tostring(error)}
@@ -1175,9 +1625,9 @@ QBCore.Commands.Add('dbtest', 'Test database connection (admin)', {}, true, func
       return
     end
     
-    print("[DEBUG dbtest] Table check result:", json.encode(rows))
+    debugConsole("[DEBUG dbtest] Table check result:", json.encode(rows))
     if #rows == 0 then
-      print("[DEBUG dbtest] Table drug_evolution_unlocks does NOT exist!")
+      debugConsole("[DEBUG dbtest] Table drug_evolution_unlocks does NOT exist!")
       TriggerClientEvent('chat:addMessage', source, {
         color = {255, 0, 0},
         args = {"[DBTEST]", "Table drug_evolution_unlocks does NOT exist!"}
@@ -1197,13 +1647,13 @@ QBCore.Commands.Add('dbtest', 'Test database connection (admin)', {}, true, func
     exports.oxmysql:insert('INSERT INTO drug_evolution_unlocks (citizenid, key_name, unlocked) VALUES (?, ?, 1)', 
       { testCitizenId, testKey }, function(result, error)
       if error then
-        print("[DEBUG dbtest] Manual insert error:", error)
+        debugConsole("[DEBUG dbtest] Manual insert error:", error)
         TriggerClientEvent('chat:addMessage', source, {
           color = {255, 0, 0},
           args = {"[DBTEST]", "Insert error: " .. tostring(error)}
         })
       else
-        print("[DEBUG dbtest] Manual insert success:", json.encode(result))
+        debugConsole("[DEBUG dbtest] Manual insert success:", json.encode(result))
         TriggerClientEvent('chat:addMessage', source, {
           color = {0, 255, 0},
           args = {"[DBTEST]", "Insert success! insertId: " .. tostring(result.insertId)}
@@ -1228,7 +1678,7 @@ QBCore.Commands.Add('dbcheck', 'Check database directly (admin)', {
   
   -- Check if drug_evolution_unlocks table exists and what's in it
   exports.oxmysql:query('SELECT * FROM drug_evolution_unlocks WHERE citizenid = ?', { citizenId }, function(rows)
-    print("[DEBUG dbcheck] Total rows for citizenid " .. citizenId .. ": " .. #rows)
+    debugConsole("[DEBUG dbcheck] Total rows for citizenid " .. citizenId .. ": " .. #rows)
     TriggerClientEvent('chat:addMessage', source, {
       color = {255, 0, 255},
       multiline = false,
@@ -1236,7 +1686,7 @@ QBCore.Commands.Add('dbcheck', 'Check database directly (admin)', {
     })
     
     for i, row in ipairs(rows) do
-      print(string.format("[DEBUG dbcheck] Row %d: key=%s, unlocked=%s, meta=%s", i, row.key_name, tostring(row.unlocked), tostring(row.meta)))
+      debugConsole(string.format("[DEBUG dbcheck] Row %d: key=%s, unlocked=%s, meta=%s", i, row.key_name, tostring(row.unlocked), tostring(row.meta)))
       TriggerClientEvent('chat:addMessage', source, {
         color = {255, 0, 255},
         multiline = false,
@@ -1249,6 +1699,10 @@ end, 'admin')
 -- Initialization
 Citizen.CreateThread(function()
   ensureTables()
+  ensureCreatorTables()
+  loadCreatorData(function()
+    syncCreatorData()
+  end)
   math.randomseed(GetGameTimer())
   debugPrint('general', 'Drug dealing system initialized')
   
@@ -1274,6 +1728,14 @@ Citizen.CreateThread(function()
     if count > 0 then
       debugPrint('general', 'Autosaved', count, 'player records')
     end
+  end
+end)
+
+AddEventHandler('QBCore:Server:OnPlayerLoaded', function(Player)
+  if not Player then return end
+  local src = Player.PlayerData and Player.PlayerData.source
+  if src then
+    syncCreatorData(src)
   end
 end)
 
@@ -1355,20 +1817,20 @@ end
 -- Try unlocks when progress changes
 local function evoTryUnlocks(src, citizenid, lastSale)
   if not (Config.Evolution and Config.Evolution.enabled) then return end
-  print("[DEBUG evoTryUnlocks] Starting for citizenid:", citizenid, "item:", lastSale and lastSale.item, "amount:", lastSale and lastSale.amount)
+  debugConsole("[DEBUG evoTryUnlocks] Starting for citizenid:", citizenid, "item:", lastSale and lastSale.item, "amount:", lastSale and lastSale.amount)
   
   evoGetRevenue(citizenid, function(totalRevenue)
-    print("[DEBUG evoTryUnlocks] Total revenue:", totalRevenue)
+    debugConsole("[DEBUG evoTryUnlocks] Total revenue:", totalRevenue)
     local newly = 0
     local nearUnlocks = {}
     local notifySettings = Config.Evolution.notifications or {}
-    print("[DEBUG evoTryUnlocks] Notifications enabled:", notifySettings.enabled)
+    debugConsole("[DEBUG evoTryUnlocks] Notifications enabled:", notifySettings.enabled)
     
     for _, th in ipairs(Config.Evolution.thresholds or {}) do
-      print("[DEBUG evoTryUnlocks] Checking threshold:", th.key, "by:", th.by, "item:", th.item, "amount:", th.amount)
+      debugConsole("[DEBUG evoTryUnlocks] Checking threshold:", th.key, "by:", th.by, "item:", th.item, "amount:", th.amount)
       exports.oxmysql:single('SELECT unlocked FROM drug_evolution_unlocks WHERE citizenid = ? AND key_name = ?', { citizenid, th.key }, function(row)
         local already = row and (row.unlocked == 1 or row.unlocked == true)
-        print("[DEBUG evoTryUnlocks] Threshold", th.key, "already unlocked:", already)
+        debugConsole("[DEBUG evoTryUnlocks] Threshold", th.key, "already unlocked:", already)
         if not already then
           local met = false
           local progress = 0
@@ -1402,20 +1864,20 @@ local function evoTryUnlocks(src, citizenid, lastSale)
             end
             
           elseif th.by == 'count' and th.item then
-            print("[DEBUG evoTryUnlocks] Count-based check for", th.item)
+            debugConsole("[DEBUG evoTryUnlocks] Count-based check for", th.item)
             exports.oxmysql:single('SELECT meta FROM drug_evolution_unlocks WHERE citizenid = ? AND key_name = ?', { citizenid, 'count_'..th.item }, function(r2)
               local cnt = 0
               if r2 and r2.meta then
                 local ok, data = pcall(json.decode, r2.meta)
                 if ok and data and data.count then cnt = tonumber(data.count) or 0 end
               end
-              print("[DEBUG evoTryUnlocks] Current", th.item, "count:", cnt, "required:", th.amount)
+              debugConsole("[DEBUG evoTryUnlocks] Current", th.item, "count:", cnt, "required:", th.amount)
               
               progress = (cnt / (th.amount or 1)) * 100
-              print("[DEBUG evoTryUnlocks] Progress:", progress .. "%")
+              debugConsole("[DEBUG evoTryUnlocks] Progress:", progress .. "%")
               
               if cnt >= (th.amount or 0) then
-                print("[DEBUG evoTryUnlocks] UNLOCKING", th.key)
+                debugConsole("[DEBUG evoTryUnlocks] UNLOCKING", th.key)
                 -- unlock
                 evoSetUnlocked(citizenid, th.key)
                 for _, rkey in ipairs(th.unlocks or {}) do evoSetUnlocked(citizenid, rkey) end
@@ -1424,7 +1886,7 @@ local function evoTryUnlocks(src, citizenid, lastSale)
               else
                 -- Check for progress notifications based on config
                 if notifySettings.enabled then
-                  print("[DEBUG evoTryUnlocks] Checking notifications for progress:", progress)
+                  debugConsole("[DEBUG evoTryUnlocks] Checking notifications for progress:", progress)
                   local milestones = notifySettings.milestones or {75, 90, 95}
                   local nearThreshold = notifySettings.nearUnlockThreshold or 95
                   
@@ -1442,7 +1904,7 @@ local function evoTryUnlocks(src, citizenid, lastSale)
                     for _, milestone in ipairs(milestones) do
                       if milestone <= progress and progress < milestone + 10 then  -- Wider range for testing
                         local remaining = (th.amount or 0) - cnt
-                        print("[DEBUG evoTryUnlocks] Sending milestone notification:", milestone, "% for", th.key)
+                        debugConsole("[DEBUG evoTryUnlocks] Sending milestone notification:", milestone, "% for", th.key)
                         evoNotify(src, string.format('🔥 Evolution Progress: %s is %d%% complete! %d more %s sales needed.', th.key, math.floor(progress), remaining, th.item), 'info')
                         break
                       end
@@ -1513,12 +1975,29 @@ end)
 QBCore.Functions.CreateCallback('bldr-drugs:getAvailableRecipes', function(src, cb)
   local Player = QBCore.Functions.GetPlayer(src)
   if not Player then cb({}) return end
-  if not (Config.Evolution and Config.Evolution.enabled) then cb({}) return end
   
   local citizenId = Player.PlayerData.citizenid
   local availableRecipes = {}
   local recipeCount = 0
   local totalRecipes = 0
+
+  -- Add custom recipes (always available unless disabled)
+  for recipeKey, recipe in pairs(CustomRecipes or {}) do
+    if recipe.enabled ~= false then
+      table.insert(availableRecipes, {
+        key = recipeKey,
+        label = recipe.label,
+        requires = recipe.requires,
+        result = recipe.result,
+        time_ms = recipe.time_ms
+      })
+    end
+  end
+
+  if not (Config.Evolution and Config.Evolution.enabled) then
+    cb(availableRecipes)
+    return
+  end
   
   -- Count total recipes
   for _, _ in pairs(Config.Evolution.recipes or {}) do
@@ -1526,7 +2005,7 @@ QBCore.Functions.CreateCallback('bldr-drugs:getAvailableRecipes', function(src, 
   end
   
   if totalRecipes == 0 then
-    cb({})
+    cb(availableRecipes)
     return
   end
   
@@ -1556,12 +2035,12 @@ end)
 -- Craft evolution recipes
 RegisterNetEvent('bldr-drugs:craftEvolution', function(recipe_key)
   local src = source
-  if not (Config.Evolution and Config.Evolution.enabled) then return end
-  local rec = Config.Evolution.recipes and Config.Evolution.recipes[recipe_key]
+  local isCustom = CustomRecipes and CustomRecipes[recipe_key] ~= nil
+  if not isCustom and not (Config.Evolution and Config.Evolution.enabled) then return end
+  local rec = (CustomRecipes and CustomRecipes[recipe_key]) or (Config.Evolution.recipes and Config.Evolution.recipes[recipe_key])
   if not rec then return end
   local Player = QBCore.Functions.GetPlayer(src); if not Player then return end
-  evoIsUnlocked(Player.PlayerData.citizenid, rec.unlock_key, function(ok)
-    if not ok then evoNotify(src, 'You have not unlocked this recipe yet.', 'error'); return end
+  local function doCraft()
 
     -- Inventory wrappers
     local function hasItem(item, count)
@@ -1596,7 +2075,7 @@ RegisterNetEvent('bldr-drugs:craftEvolution', function(recipe_key)
     for _, req in ipairs(rec.requires or {}) do removeItem(req.item, req.count or 1) end
     
     -- Generate purity for the evolved drug
-    local itemConfig = Config.Items[rec.result.item]
+    local itemConfig = getItemConfig(rec.result.item)
     local purity = generatePurity(rec.result.item, nil)
     local purityLevel, purityData = getPurityLevel(purity)
     
@@ -1608,7 +2087,16 @@ RegisterNetEvent('bldr-drugs:craftEvolution', function(recipe_key)
     
     addItem(rec.result.item, rec.result.count or 1, itemInfo)
     evoNotify(src, ('Crafted %s with %s quality!'):format(rec.label or recipe_key, purityData.label), 'success')
-  end)
+  end
+
+  if rec.unlock_key and rec.unlock_key ~= '' then
+    evoIsUnlocked(Player.PlayerData.citizenid, rec.unlock_key, function(ok)
+      if not ok then evoNotify(src, 'You have not unlocked this recipe yet.', 'error'); return end
+      doCraft()
+    end)
+  else
+    doCraft()
+  end
 end)
 
 -- New command to check evolution progress and unlock status

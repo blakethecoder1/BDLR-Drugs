@@ -25,6 +25,8 @@
 
 ### ⚙️ **Robbery Configuration Options**
 - `Config.Robbery.enabled` - Master toggle for robbery system
+- `Config.Robbery.selectedPreset` - Quick balance profile: `easy` / `medium` / `hard` / `custom`
+- `Config.Robbery.presets` - Preset values for robbery chance, cash theft %, and flee behavior
 - `Config.Robbery.chance` - Percentage chance per sale (default 15%)
 - `Config.Robbery.attackPlayer` - If false, robbers just steal and run
 - `Config.Robbery.fightBackIfAttacked` - Robbers defend themselves if attacked
@@ -35,6 +37,18 @@
 - `Config.Robbery.robberModels` - 10 gang member models
 - `Config.Robbery.weapons` - 5 weapon types (or unarmed)
 - `Config.Robbery.theftAnimTime` - Time robber spends stealing (2 seconds)
+
+### 🎚️ **Robbery Presets (Easy / Medium / Hard)**
+Use presets to tune risk in seconds:
+
+```lua
+Config.Robbery.selectedPreset = 'easy'   -- easy | medium | hard | custom
+```
+
+- `easy`: lower robbery chance, lower theft %, robbers flee early/often
+- `medium`: balanced default profile
+- `hard`: higher robbery chance, higher theft %, robbers flee less and fight longer
+- `custom`: ignores preset override and uses your manual `Config.Robbery` values
 
 ### 🎨 **v2.8 UI Customization Features**
 - **In-UI Color Customizer**: Change UI colors directly from the interface with live preview
@@ -278,14 +292,14 @@ add_ace identifier.steam:110000XXXXXXXX bldr.drugs.admin allow
 ```lua
 Config.Debug = {
   enabled = false,         -- Master debug toggle - set to false to disable ALL debug output
-  showNPCs = true,        -- Show NPC debug info
-  showSales = true,       -- Show sale transactions
-  showSpawning = true,    -- Show NPC spawning/despawning
-  showInteractions = true,-- Show player-NPC interactions
-  showPolice = true,      -- Show police detection
-  showXP = true,          -- Show XP calculations
-  drawMarkers = true,     -- Draw 3D markers for NPCs
-  printToConsole = true,  -- Print debug to server console
+  showNPCs = false,       -- Show NPC debug info
+  showSales = false,      -- Show sale transactions
+  showSpawning = false,   -- Show NPC spawning/despawning
+  showInteractions = false,-- Show player-NPC interactions
+  showPolice = false,     -- Show police detection
+  showXP = false,         -- Show XP calculations
+  drawMarkers = false,    -- Draw 3D markers for NPCs
+  printToConsole = false, -- Print debug to server console
   printToChat = false     -- Print debug to player chat
 }
 ```
@@ -335,7 +349,60 @@ Config.NPCs = {
 
 ---
 
-## 🎮 **Admin Commands**
+## 🎮 **Commands Reference**
+
+### 🌿 **Player Commands**
+
+| Command | Description | Access |
+|---------|-------------|--------|
+| `/testminigame` | Test harvest minigame | Everyone |
+| `/bldr_test_nui` | Test NUI interface | Everyone |
+| `/checknpc` | Identify nearby NPC models | Everyone |
+
+### 🎨 **UI Customization Commands**
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `/bldr_setcolor [type] [hex]` | Set individual colors | `/bldr_setcolor primary #ff0000` |
+| `/bldr_setgradient [type] [css]` | Set custom gradients | `/bldr_setgradient panel linear-gradient(...)` |
+| `/bldr_showcolors` | Display current color configuration | `/bldr_showcolors` |
+| `/bldr_resetcolors` | Reset to default theme | `/bldr_resetcolors` |
+| `/bldr_savecolors` | Save current colors to config | `/bldr_savecolors` |
+
+### 🔧 **Admin Commands**
+
+| Command | Description | Permission |
+|---------|-------------|------------|
+| `/clearevodata [player_id] [drug]` | Clear evolution progress | `bldr.drugs.admin` |
+| `/dbcheck [player_id]` | Verify database evolution tables | `bldr.drugs.admin` |
+| `/setunlocked [player_id] [drug]` | Force unlock evolved drug | `bldr.drugs.admin` |
+| `/checkprogress [player_id]` | View player evolution progress | `bldr.drugs.admin` |
+| `/checkevolution [player_id]` | Check drug evolution progress | `bldr.drugs.admin` |
+| `/debugunlocks [player_id]` | View all evolution unlock states | `bldr.drugs.admin` |
+| `/forceunlock [player_id] [recipe]` | Manually unlock evolution recipe | `bldr.drugs.admin` |
+| `/adddrugxp [player_id] [amount]` | Give XP to player | `bldr.drugs.admin` |
+| `/checkdrugstats [player_id]` | Check player drug stats | `bldr.drugs.admin` |
+| `/drugdebug` | Toggle debug mode | `bldr.drugs.admin` |
+| `/testexactsyntax` | Test database connection | `bldr.drugs.admin` |
+
+### 📊 **Evolution Data Management Examples**
+
+```bash
+# Clear specific drug evolution data
+/clearevodata 1 meth              # Clear player 1's meth evolution
+/clearevodata 1 weed              # Clear player 1's weed evolution
+/clearevodata 1 cocaine           # Clear player 1's cocaine evolution
+/clearevodata 1 all               # Clear all evolution data for player 1
+
+# Check progress and debugging
+/checkevolution 1                 # See player 1's progress
+/dbcheck 1                        # Check database entries for player 1
+/testexactsyntax                  # Test database connection
+```
+
+---
+
+## 🎮 **Admin Commands (Legacy)**
 
 ### 💊 **XP Management**
 ```bash
@@ -728,11 +795,11 @@ Copy-Item "resources/[standalone]/bldr-drugs/images/*" "resources/[ox]/ox_invent
 ```lua
 -- Debug system with multiple categories
 Config.Debug = {
-  enabled = true,              -- Master debug toggle
-  showNPCs = true,            -- NPC spawn/despawn info
-  showSales = true,           -- Sale transaction details
-  showPolice = true,          -- Police detection info
-  drawMarkers = true,         -- Visual NPC markers
+  enabled = false,             -- Master debug toggle
+  showNPCs = false,           -- NPC spawn/despawn info
+  showSales = false,          -- Sale transaction details
+  showPolice = false,         -- Police detection info
+  drawMarkers = false,        -- Visual NPC markers
 }
 
 -- NPC Management
