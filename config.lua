@@ -443,6 +443,61 @@ Config.ThirdEye = {
   blacklistedZones = {}        -- add zone names if needed
 }
 
+-- Hot zones boost payouts, XP, and close rates in higher-risk territories
+Config.HotZones = {
+  enabled = true,
+  notifyOnEnterExit = true,
+  showBlips = true,
+  refreshInterval = 2000,
+  defaultPriceMultiplier = 1.25,
+  defaultXPMultiplier = 1.75,
+  defaultSuccessChanceBonus = 0.04,
+  zones = {
+    {
+      name = 'Forum Drive Turf',
+      coords = vector3(138.24, -1921.93, 21.38),
+      radius = 140.0,
+      priceMultiplier = 1.3,
+      xpMultiplier = 1.9,
+      successChanceBonus = 0.05,
+      blip = {
+        sprite = 514,
+        color = 1,
+        scale = 0.9,
+        label = 'Drug Hot Zone'
+      }
+    },
+    {
+      name = 'Davis Cut',
+      coords = vector3(-42.58, -1751.32, 29.42),
+      radius = 120.0,
+      priceMultiplier = 1.22,
+      xpMultiplier = 1.65,
+      successChanceBonus = 0.03,
+      blip = {
+        sprite = 514,
+        color = 47,
+        scale = 0.9,
+        label = 'Drug Hot Zone'
+      }
+    },
+    {
+      name = 'Rancho Projects',
+      coords = vector3(484.87, -1529.14, 29.29),
+      radius = 135.0,
+      priceMultiplier = 1.35,
+      xpMultiplier = 2.0,
+      successChanceBonus = 0.06,
+      blip = {
+        sprite = 514,
+        color = 5,
+        scale = 0.95,
+        label = 'Drug Hot Zone'
+      }
+    }
+  }
+}
+
 -- === BLDR-DRUGS: Evolution (progression) ===
 Config.Evolution = {
   enabled = true,

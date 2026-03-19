@@ -7,12 +7,17 @@ local lastTokenRequest = 0
 local activeNPCs = {}
 local playerLevel = 0
 local playerXP = 0
+local playerTitle = 'Street Rookie'
+local playerMultiplier = 1.0
+local nextLevelXP = 100
 local nearbyNPC = nil
 local isInteracting = false
 local thirdEyeTargets = {}
 local npcCooldowns = {} -- Track NPCs we've recently dealt with: {entityId: expireTime}
 local activeRobber = nil
 local robberActive = false
+local currentHotZone = nil
+local hotZoneBlips = {}
 
 -- Admin creator dynamic data
 local DynamicItems = {}
@@ -299,10 +304,82 @@ local function IsInBlacklistedZone(coords)
   return false
 end
 
+local function GetActiveHotZone(coords)
+  if not coords or not Config.HotZones or not Config.HotZones.enabled or not Config.HotZones.zones then
+    return nil
+  end
+
+  local closestZone = nil
+  local closestDistance = nil
+
+  for _, zone in pairs(Config.HotZones.zones) do
+    if zone.coords and zone.radius then
+      local distance = #(coords - zone.coords)
+      if distance <= zone.radius and (not closestDistance or distance < closestDistance) then
+        closestDistance = distance
+        closestZone = {
+          name = zone.name or 'Hot Zone',
+          priceMultiplier = tonumber(zone.priceMultiplier) or Config.HotZones.defaultPriceMultiplier or 1.0,
+          xpMultiplier = tonumber(zone.xpMultiplier) or Config.HotZones.defaultXPMultiplier or 1.0,
+          successChanceBonus = tonumber(zone.successChanceBonus) or Config.HotZones.defaultSuccessChanceBonus or 0.0
+        }
+      end
+    end
+  end
+
+  return closestZone
+end
+
+local function SendHotZoneStateToUI()
+  SendNUIMessage({
+    action = 'setHotZone',
+    hotZone = currentHotZone
+  })
+end
+
+local function RemoveHotZoneBlips()
+  for _, blip in ipairs(hotZoneBlips) do
+    if blip and DoesBlipExist(blip) then
+      RemoveBlip(blip)
+    end
+  end
+
+  hotZoneBlips = {}
+end
+
+local function SetupHotZoneBlips()
+  RemoveHotZoneBlips()
+
+  if not Config.HotZones or not Config.HotZones.enabled or not Config.HotZones.showBlips then
+    return
+  end
+
+  for _, zone in pairs(Config.HotZones.zones or {}) do
+    if zone.coords and zone.radius then
+      local radiusBlip = AddBlipForRadius(zone.coords.x, zone.coords.y, zone.coords.z, zone.radius + 0.0)
+      SetBlipColour(radiusBlip, zone.blip and zone.blip.color or 1)
+      SetBlipAlpha(radiusBlip, 96)
+      hotZoneBlips[#hotZoneBlips + 1] = radiusBlip
+
+      local centerBlip = AddBlipForCoord(zone.coords.x, zone.coords.y, zone.coords.z)
+      SetBlipSprite(centerBlip, zone.blip and zone.blip.sprite or 84)
+      SetBlipDisplay(centerBlip, 4)
+      SetBlipScale(centerBlip, zone.blip and zone.blip.scale or 0.85)
+      SetBlipColour(centerBlip, zone.blip and zone.blip.color or 1)
+      SetBlipAsShortRange(centerBlip, true)
+      BeginTextCommandSetBlipName('STRING')
+      AddTextComponentString(zone.blip and zone.blip.label or zone.name or 'Hot Zone')
+      EndTextCommandSetBlipName(centerBlip)
+      hotZoneBlips[#hotZoneBlips + 1] = centerBlip
+    end
+  end
+end
+
 -- Third-Eye Integration Functions
 local function OpenDrugSelling(data)
   local playerCoords = GetEntityCoords(PlayerPedId())
   local isBlacklisted, zoneName = IsInBlacklistedZone(playerCoords)
+  currentHotZone = GetActiveHotZone(playerCoords)
   
   if isBlacklisted then
     CustomNotify('You cannot sell drugs in this area: ' .. zoneName, 'error')
@@ -319,6 +396,7 @@ local function OpenDrugSelling(data)
       playerTitle = playerTitle or 'Street Rookie',
       playerXP = playerXP,
       nextLevelXP = nextLevelXP or 0,
+      hotZone = currentHotZone,
       debug = (Config.Debug and Config.Debug.enabled and Config.Debug.printToConsole) or false,
       colors = Config.UI and Config.UI.colors or nil,
       gradients = Config.UI and Config.UI.gradients or nil
@@ -338,6 +416,7 @@ local function OpenDrugSelling(data)
           playerTitle = playerTitle or 'Street Rookie',
           playerXP = playerXP,
           nextLevelXP = nextLevelXP or 0,
+          hotZone = currentHotZone,
           debug = (Config.Debug and Config.Debug.enabled and Config.Debug.printToConsole) or false,
           colors = Config.UI and Config.UI.colors or nil,
           gradients = Config.UI and Config.UI.gradients or nil
@@ -794,8 +873,15 @@ RegisterNUICallback('requestSell', function(data, cb)
       if result and result.xpGained and result.xpGained > 0 then
         xpText = " | +" .. result.xpGained .. " XP 📈"
       end
+
+      local hotZoneText = ""
+      if result and result.hotZone then
+        hotZoneText = string.format(" | %s x%.2f cash / x%.2f XP", result.hotZone.name or 'Hot Zone', result.hotZone.priceMultiplier or 1.0, result.hotZone.xpMultiplier or 1.0)
+        currentHotZone = result.hotZone
+        SendHotZoneStateToUI()
+      end
       
-      CustomNotify('Deal completed successfully!' .. rewardText .. xpText, 'success')
+      CustomNotify('Deal completed successfully!' .. rewardText .. xpText .. hotZoneText, 'success')
       
       -- Set cooldown on this NPC
       if nearbyNPC and DoesEntityExist(nearbyNPC.entity) then
@@ -1907,6 +1993,7 @@ end)
 -- Test NUI communication
 RegisterCommand('bldr_test_nui', function()
   print("[BLDR-DRUGS] Testing NUI communication...")
+  currentHotZone = GetActiveHotZone(GetEntityCoords(PlayerPedId()))
   SetNuiFocus(true, true)
   SendNUIMessage({ 
     action = 'open', 
@@ -1914,6 +2001,7 @@ RegisterCommand('bldr_test_nui', function()
     playerTitle = playerTitle or 'Street Rookie',
     playerXP = playerXP or 0,
     nextLevelXP = 100,
+    hotZone = currentHotZone,
     debug = (Config.Debug and Config.Debug.enabled and Config.Debug.printToConsole) or false,
     colors = Config.UI and Config.UI.colors or nil,
     gradients = Config.UI and Config.UI.gradients or nil
@@ -2124,13 +2212,50 @@ Citizen.CreateThread(function()
   end
 end)
 
+Citizen.CreateThread(function()
+  local interval = (Config.HotZones and Config.HotZones.refreshInterval) or 2000
+
+  while true do
+    Citizen.Wait(interval)
+
+    if Config.HotZones and Config.HotZones.enabled then
+      local detectedZone = GetActiveHotZone(GetEntityCoords(PlayerPedId()))
+      local previousName = currentHotZone and currentHotZone.name or nil
+      local newName = detectedZone and detectedZone.name or nil
+
+      if previousName ~= newName then
+        currentHotZone = detectedZone
+
+        if Config.HotZones.notifyOnEnterExit then
+          if currentHotZone then
+            CustomNotify(string.format('Hot zone active: %s | Cash x%.2f | XP x%.2f', currentHotZone.name, currentHotZone.priceMultiplier or 1.0, currentHotZone.xpMultiplier or 1.0), 'success')
+          elseif previousName then
+            CustomNotify('You left the hot zone. Sales are back to standard rates.', 'info')
+          end
+        end
+
+        SendHotZoneStateToUI()
+      end
+    elseif currentHotZone then
+      currentHotZone = nil
+      SendHotZoneStateToUI()
+    end
+  end
+end)
+
 -- Third-eye initialization
 Citizen.CreateThread(function()
   Wait(2000) -- Wait for dependencies to load
+  SetupHotZoneBlips()
   if Config.ThirdEye.enabled then
     SetupThirdEyeTargets()
     debugPrint("Third-eye drug selling system initialized")
   end
+end)
+
+AddEventHandler('onResourceStop', function(resourceName)
+  if resourceName ~= GetCurrentResourceName() then return end
+  RemoveHotZoneBlips()
 end)
 
 -- Helper: draw 3d text

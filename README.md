@@ -1,1324 +1,387 @@
-# 🌿 BLDR-Drugs v2.9 - Advanced Drug Dealing System
-**Next-Generation Drug Dealing for QBCore FiveM Servers**
+# BLDR-Drugs v2.9.0
 
-> **Author:** blakethepet | **Framework:** QBCore | **Status:** Production Ready
+Advanced drug dealing resource for QBCore with dynamic NPC sales, third-eye selling, robbery events, hot zones, evolution crafting, UI theme controls, and an in-game admin creator.
 
-![FiveM](https://img.shields.io/badge/FiveM-QBCore-green)
-![License](https://img.shields.io/badge/License-Custom%20Commercial-red)
-![Version](https://img.shields.io/badge/Version-2.9-brightgreen)
-![Status](https://img.shields.io/badge/Status-Production%20Ready-success)
-![Author](https://img.shields.io/badge/Author-blakethepet-blue)
+## Current Update Summary
 
----
+These are the major systems currently present in the codebase:
 
-## 📋 **Changelog - v2.9 Smart Robbery Update**
+- Robbery system with presets, peaceful handover, cash theft, item theft, and police dispatch
+- Third-eye selling support for qb-target or ox_target
+- NPC filtering to block shopkeepers, vehicle peds, mission peds, and robber models
+- Hot zones that boost payout, XP, and success chance
+- Evolution progression with unlockable recipes and crafting tables
+- Admin creator that saves custom items, recipes, and crafting tables to MySQL
+- UI color and gradient customization from commands and the NUI
+- Sale telemetry, XP persistence, anti-spam rate limits, and server-side validation
 
-### 🎭 **NEW: Realistic Robbery System**
-- **Non-Violent Robberies**: Robbers steal and flee instead of attacking by default
-- **Conditional Combat**: Robbers only fight back if you attack them first
-- **Theft Animation**: Realistic "stick-up" behavior with approach and flee mechanics
-- **Cash Theft**: Robbers steal a percentage of your cash during deals
-- **Item Theft**: Can steal the drugs you were trying to sell
-- **Police Dispatch**: Automatic alerts to police when robbery occurs
-- **Configurable Behavior**: Choose between passive or aggressive robber AI
-- **Smart Despawning**: Robbers flee and despawn after successful theft
+## Player-Facing Updates
 
-### ⚙️ **Robbery Configuration Options**
-- `Config.Robbery.enabled` - Master toggle for robbery system
-- `Config.Robbery.selectedPreset` - Quick balance profile: `easy` / `medium` / `hard` / `custom`
-- `Config.Robbery.presets` - Preset values for robbery chance, cash theft %, and flee behavior
-- `Config.Robbery.chance` - Percentage chance per sale (default 15%)
-- `Config.Robbery.attackPlayer` - If false, robbers just steal and run
-- `Config.Robbery.fightBackIfAttacked` - Robbers defend themselves if attacked
-- `Config.Robbery.canStealCash` - Allow cash theft
-- `Config.Robbery.canStealItems` - Allow item theft
-- `Config.Robbery.maxCashStolen` - Min/max/percent cash theft amounts
-- `Config.Robbery.dispatchEnabled` - Send police alerts
-- `Config.Robbery.robberModels` - 10 gang member models
-- `Config.Robbery.weapons` - 5 weapon types (or unarmed)
-- `Config.Robbery.theftAnimTime` - Time robber spends stealing (2 seconds)
+If you want a simple list of what players and customers will actually notice in-game, use this section.
 
-### 🎚️ **Robbery Presets (Easy / Medium / Hard)**
-Use presets to tune risk in seconds:
+### What Changed For Dealers
 
-```lua
-Config.Robbery.selectedPreset = 'easy'   -- easy | medium | hard | custom
-```
+- Drug selling now feels more dynamic with roaming NPC customers and third-eye support
+- Selling in hot zones gives better payouts, more XP, and a slightly better chance to close deals
+- Players progress through dealer ranks and earn better multipliers as they gain XP
+- Evolved drugs unlock through repeated sales and can be crafted into higher-value products
+- The sale UI has cleaner notifications and customizable colors
 
-- `easy`: lower robbery chance, lower theft %, robbers flee early/often
-- `medium`: balanced default profile
-- `hard`: higher robbery chance, higher theft %, robbers flee less and fight longer
-- `custom`: ignores preset override and uses your manual `Config.Robbery` values
+### What Changed For Customers And NPC Buyers
 
-### 🎨 **v2.8 UI Customization Features**
-- **In-UI Color Customizer**: Change UI colors directly from the interface with live preview
-- **Real-Time Theme Preview**: See color changes instantly as you adjust them
-- **6 Preset Themes**: Quick-apply themes (Default Green, Blue, Purple, Red, Gold, Cyan)
-- **Individual Color Controls**: Customize primary, success, warning, error, text, and muted text colors
-- **Command-Based Controls**: `/bldr_setcolor`, `/bldr_setgradient`, `/bldr_showcolors`, `/bldr_resetcolors`, `/bldr_savecolors`
+- Shopkeepers, store clerks, mission NPCs, and vehicle NPCs are filtered out so only sensible buyers can be used
+- Customer interactions are safer and more believable because the system blocks obvious non-buyers
+- Some deals can now turn into robberies, which adds risk to otherwise successful sales
+- Robber NPCs are pulled from a separate pool and are blocked from being normal customers
 
-### ❌ **Removed Systems**
-- **Purity System Completely Removed**: All purity mechanics, quality checks, and rejection systems have been removed for streamlined gameplay
+### Risk And Reward Changes
 
----
+- Robberies can steal cash, steal product, and cancel the sale depending on config
+- Police can receive robbery alerts when a deal goes bad
+- Marked bills can be given instead of direct cash, depending on money settings
+- XP, payouts, and sale outcomes are tracked more cleanly for balancing and progression
 
-## �🚀 **What Makes This Amazing**
+### Admin And Server Owner Benefits
 
-### 🎭 **Realistic Robbery System** (NEW in v2.9)
-- **Smart Robber AI**: NPCs approach, steal items/cash, then flee realistically
-- **Non-Violent by Default**: Robbers don't attack unless you shoot first
-- **Defensive Combat**: Attack a robber and they'll fight back to defend themselves
-- **Theft Mechanics**: 
-  - Steal 10-50% of your carried cash (configurable)
-  - Can steal the drugs you were trying to sell
-  - Realistic "stick-up" animation and behavior
-- **Police Integration**: Automatic dispatch alerts when robberies occur
-- **Configurable Risk**: Set robbery chance per sale (default 15%)
-- **10 Robber Models**: Gang members from various factions
-- **Multiple Weapons**: Pistols, SMGs, or unarmed robbers
-- **Smart Despawning**: Robbers flee and cleanup after successful theft
-- **Behavior Modes**: Choose between passive theft or aggressive attack behavior
+- New drugs, recipes, and crafting tables can be added in-game with the admin creator
+- Hot zones, robbery difficulty, target mode, and reward types can all be tuned from config
+- SQL migrations are split by system so upgrades are easier to manage
 
-### 🎯 **Dual Interaction System**
-- **Traditional NPC Approach**: Walk up to randomly spawning NPCs for classic drug dealing
-- **Third-Eye Universal Selling**: Use qb-target/ox_target to sell to ANY player, NPC, or object anywhere
-- **Smart Detection**: System automatically switches between interaction methods
-- **Zone Protection**: Blacklisted areas prevent selling in inappropriate locations
-- **Flexible Configuration**: Enable/disable either system based on server preferences
+## Changelog
 
-### 🚫 **Smart NPC Filtering System** (NEW in v2.6)
-- **Anti-Shop Protection**: Prevents selling to shop keepers, gas station workers, and other inappropriate NPCs
-- **Blacklist System**: Pre-configured list of NPCs that won't buy drugs (24/7 stores, Ammunation, etc.)
-- **Distance Filtering**: 50-meter safe zone around shops and legitimate businesses
-- **Vehicle Protection**: Blocks selling to NPCs sitting in cars
-- **Mission NPC Protection**: Safeguards story-important characters
-- **Admin Tools**: `/checknpc` command to identify and add NPCs to blacklist
+### Hot Zones And Territory Update
 
-### 🧬 **Drug Evolution System** (NEW in v2.7)
-- **Progressive Unlocks**: Sell drugs to unlock evolved recipes with better profits
-- **Smart Progress Tracking**: Automatic notifications at 75%, 90%, 95% completion
-- **Physical Crafting Tables**: Third-eye integration with dedicated crafting stations
-- **Persistent Progress**: All evolution progress saved across server restarts
-- **Admin Management**: Complete tools for monitoring and managing player progression
-- **Configurable Thresholds**: Customize sales requirements for each drug type
+- Added drug hot zones that reward players for selling in higher-risk areas
+- Hot zones now increase payout, XP gain, and sale success chance
+- Added default zone support for Forum Drive Turf, Davis Cut, and Rancho Projects
+- Added optional hot zone map blips and enter/exit notifications
+- Moved zone bonus checks server-side so payouts and XP boosts cannot be spoofed from the client
 
-### � **Enhanced NPC Interactions**
-- **Smart Looking System**: NPCs stop and face you when selling
-- **Conversation Animations**: NPCs switch to talking stance during deals
-- **Post-Sale Reactions**: 
-  - **Successful Sale**: NPC waves goodbye and walks away
-  - **Failed Sale**: NPC shrugs in disappointment
-- **Third-Eye Integration**: Any NPC automatically faces you when targeted
-- **Realistic Timing**: 2-second interaction windows for natural conversation flow
+### Customer And NPC Buyer Improvements
 
-### 💰 **Advanced Money & Reward System**
-- **Markedbills Support**: 80% chance to receive marked bills instead of direct money
-- **Multiple Money Types**: Cash, Bank, Black Money (ESX), Crypto Currency
-- **Configurable Rewards**: Full control over reward types and chances
-- **Enhanced Notifications**: Detailed rewards showing exactly what you received
-- **ESX Compatibility**: Automatic detection and support for ESX black money
+- Added smarter NPC filtering so players cannot sell to store clerks, shopkeepers, mission NPCs, or NPCs in vehicles
+- Added blacklist support for non-valid buyers to keep customer interactions believable
+- Blocked robber models from being used as normal sale customers
+- Improved customer selection so deals happen with more appropriate street NPCs
 
-### �🎮 **Dynamic NPC System**
-- **15 intelligent NPCs** spawn around players automatically
-- **Realistic AI behavior**: NPCs walk, smoke, and use phones
-- **Interactive dealing**: Approach walking NPCs instead of static locations
-- **Smart spawning**: NPCs appear in safe zones with ground detection
-- **Auto-cleanup**: Old/distant NPCs despawn automatically
+### Risk And Robbery Update
 
-### 💎 **5-Tier Drug Progression System**
-| Drug | Level Required | Base Price | Risk Level | XP per Unit |
-|------|----------------|------------|------------|-------------|
-| 🌿 **Weed** | 0 (Street Rookie) | $50 | Low | 5 XP |
-| 💊 **Ecstasy** | 1 (Corner Dealer) | $80 | Low-Med | 6 XP |
-| ❄️ **Cocaine** | 2 (Block Runner) | $120 | Medium | 8 XP |
-| 🧪 **Meth** | 3 (Neighborhood Pusher) | $180 | High | 10 XP |
-| 💉 **Heroin** | 4 (District Supplier) | $200 | Very High | 12 XP |
+- Added robbery encounters that can trigger during successful deals
+- Added robbery presets for easy, medium, hard, and custom balancing
+- Added peaceful handover support so players can give up product instead of fighting
+- Added optional cash theft, item theft, dispatch alerts, and sale cancellation on robbery
+- Added robbery logging support in sale telemetry
 
-### 🏆 **8-Level Progression System**
-| Level | Title | XP Required | Money Multiplier |
-|-------|-------|-------------|------------------|
-| **0** | Street Rookie | 0 XP | 1.0x |
-| **1** | Corner Dealer | 100 XP | 1.05x |
-| **2** | Block Runner | 300 XP | 1.12x |
-| **3** | Neighborhood Pusher | 700 XP | 1.2x |
-| **4** | District Supplier | 1,500 XP | 1.35x |
-| **5** | City Kingpin | 3,000 XP | 1.5x |
-| **6** | Regional Boss | 6,000 XP | 1.75x |
-| **7** | Drug Lord | 12,000 XP | 2.0x |
+### Progression And Rewards Update
 
-### 🎨 **Enhanced UI Experience**
-- **Fully Customizable Colors** - change the entire UI theme to match your server
-- **In-UI Theme Editor** - click the 🎨 button to customize colors without config edits
-- **6 Preset Themes** - instantly apply professional color schemes
-- **Real-Time Preview** - see changes live as you customize
-- **Semi-transparent interface** - see the world behind while dealing
-- **Cyberpunk styling** with glowing effects and animations
-- **Real-time XP tracking** with animated progress bars
-- **Smart item selection** with descriptions and requirements
-- **Responsive Design** - works perfectly on all screen resolutions
+- Added hot zone reward bonuses on top of the existing XP and dealer level progression
+- Continued support for marked bills rewards and multiple money payout types
+- Improved logging of payout type, unit price, sale multipliers, and robbery outcomes
 
----
+### Admin And Configuration Update
 
-## 📊 **Evolution System**
+- Added configurable hot zone definitions in `Config.HotZones`
+- Added control over zone blips, notifications, and default multipliers
+- Kept all zone tuning editable from config without requiring code changes
+- Added supporting SQL upgrade path for newer telemetry columns when upgrading older installs
 
-The evolution system allows players to unlock premium drug variants through dedicated dealing:
+## Dependencies
 
-### **Unlock Requirements**
-- **Weed → Chronic Kush**: Sell 25 weed units
-- **Cocaine → Pure Colombian**: Sell 20 cocaine units  
-- **Meth → Blue Crystal**: Sell 15 meth units
+Required:
 
-### **Progress Tracking**
-- Real-time notifications for milestones (25%, 50%, 75%, 90%, 95%)
-- Persistent progress across server restarts
-- Visual progress indicators with enhanced ox_lib notifications
+- qb-core
+- ox_lib
+- oxmysql
 
-### **Evolution Benefits**
-| Standard Drug | Evolved Variant | Price Increase | Benefits |
-|---------------|-----------------|----------------|----------|
-| Weed ($50) | Chronic Kush ($85) | +70% | Premium quality, better reputation |
-| Cocaine ($120) | Pure Colombian ($200) | +67% | Higher purity, increased demand |
-| Meth ($180) | Blue Crystal ($300) | +67% | Laboratory grade, maximum potency |
+Optional:
 
-## 🎨 **UI Customization System** (NEW in v2.8)
+- qb-target
+- ox_target
+- es_extended only if you use `Config.Money.type = 'black_money'`
 
-Personalize the drug dealing interface with a powerful theme customization system:
+## Installation
 
-### **In-UI Theme Editor**
-- **Click the 🎨 button** in the UI header to open the theme customizer
-- **Live Preview**: See color changes instantly as you adjust them
-- **Visual Color Pickers**: Use HTML5 color pickers or type hex codes
-- **Synchronized Inputs**: Color picker and text input stay in sync automatically
+1. Place the resource in your server resources folder.
+2. Ensure the folder name matches `Config.ResourceName` if you change it. Default is `bldr-drugs`.
+3. Run the SQL files that match the systems you use:
+   - `sql/migration.sql` for core XP and sale logs
+   - `sql/migration_evolution.sql` for evolution progression and unlocks
+   - `sql/admin_creator.sql` for the admin creator item, recipe, and table storage
+   - `sql/add_missing_columns.sql` only if you are upgrading an older install and need missing columns added safely
+4. Add the resource to your server start order after dependencies.
+5. Configure items, rewards, third-eye choice, hot zones, evolution, and creator permissions in `config.lua`.
 
-### **Customizable Colors**
-| Color Type | Default | Description |
-|------------|---------|-------------|
-| **Primary** | #00ff88 (Green) | Main accent color, borders, headers |
-| **Success** | #00ff88 (Green) | Success messages, confirmations |
-| **Warning** | #ffaa00 (Orange) | Warning messages, cautions |
-| **Error** | #ff4444 (Red) | Error messages, rejections |
-| **Text** | #ffffff (White) | Main text color |
-| **Text Muted** | #a0a0a0 (Gray) | Secondary text, descriptions |
+Example `server.cfg` order:
 
-### **6 Preset Themes**
-Quick-apply professional color schemes with one click:
-- 🟢 **Default (Green)** - Classic BLDR green theme
-- 🔵 **Blue** - Cool, professional blue accent
-- 🟣 **Purple** - Luxurious purple theme
-- 🔴 **Red** - Bold, dangerous red theme
-- 🟡 **Gold** - Premium gold accents
-- 🔷 **Cyan** - Futuristic cyan theme
-
-### **Command-Based Color Control**
-For advanced users and server owners:
-- `/bldr_setcolor [type] [hex]` - Set individual colors (e.g., `/bldr_setcolor primary #ff0000`)
-- `/bldr_setgradient [type] [css]` - Set custom gradients
-- `/bldr_showcolors` - Display current color configuration
-- `/bldr_resetcolors` - Reset to default theme
-- `/bldr_savecolors` - Save current colors to config
-
-### **Configuration**
-```lua
-Config.UI = {
-    colors = {
-        primary = '#00ff88',      -- Main accent color
-        success = '#00ff88',      -- Success notifications
-        warning = '#ffaa00',      -- Warning notifications
-        error = '#ff4444',        -- Error notifications
-        text = '#ffffff',         -- Main text
-        textMuted = '#a0a0a0'     -- Secondary text
-    },
-    gradients = {
-        panel = 'linear-gradient(145deg, rgba(0,0,0,0.95), rgba(20,20,20,0.95))',
-        header = 'linear-gradient(145deg, rgba(0,255,136,0.1), rgba(0,180,100,0.05))',
-        xpBar = 'linear-gradient(90deg, #00ff88, #00cc6a)'
-    }
-}
-```
-
-## 🎮 **Admin Commands**
-
-| Command | Description | Permission Required |
-|---------|-------------|-------------------|
-| `/clearevodata [player_id]` | Clear evolution progress for player | `bldr.drugs.admin` |
-| `/dbcheck` | Verify database evolution tables | `bldr.drugs.admin` |
-| `/setunlocked [player_id] [drug]` | Force unlock evolved drug | `bldr.drugs.admin` |
-| `/checkprogress [player_id]` | View player's evolution progress | `bldr.drugs.admin` |
-
----
-
-## ⚙️ **Configuration**
-
-### 💰 **Money & Rewards Configuration**
-```lua
-Config.Money = {
-  type = 'cash',           -- 'cash', 'bank', 'crypto', 'black_money'
-  useMarkedBills = true,   -- Give markedbills instead of direct money
-  markedBillsChance = 0.8, -- 80% chance to get markedbills, 20% cash
-  markedBillsItem = 'markedbills', -- Item name for marked bills
-}
-```
-
-### 🧬 **Evolution System Configuration**
-```lua
-Config.Evolution = {
-    enabled = true,
-    thresholds = {
-        weed = 25,      -- Sales needed for Chronic Kush
-        cocaine = 20,   -- Sales needed for Pure Colombian  
-        meth = 15       -- Sales needed for Blue Crystal
-    },
-    notifications = {
-        enabled = true,
-        milestones = {25, 50, 75, 90, 95}, -- Progress percentages to notify
-        style = "ox_lib" -- Enhanced notifications with better visibility
-    }
-}
-```
-
-
-
-### 🔐 **Permissions Configuration**
 ```cfg
-# In server.cfg or permissions.cfg
-add_ace group.admin bldr.drugs.admin allow
-add_ace group.moderator bldr.drugs.admin allow
-
-# Give specific users admin access
-add_ace identifier.steam:110000XXXXXXXX bldr.drugs.admin allow
-```
-
-### 🐛 **Debug System**
-```lua
-Config.Debug = {
-  enabled = false,         -- Master debug toggle - set to false to disable ALL debug output
-  showNPCs = false,       -- Show NPC debug info
-  showSales = false,      -- Show sale transactions
-  showSpawning = false,   -- Show NPC spawning/despawning
-  showInteractions = false,-- Show player-NPC interactions
-  showPolice = false,     -- Show police detection
-  showXP = false,         -- Show XP calculations
-  drawMarkers = false,    -- Draw 3D markers for NPCs
-  printToConsole = false, -- Print debug to server console
-  printToChat = false     -- Print debug to player chat
-}
-```
-
-### 🎯 **Third-Eye Integration**
-```lua
-Config.ThirdEye = {
-  enabled = true,          -- Enable third-eye interactions
-  useQBTarget = true,      -- Use qb-target (false for ox_target)
-  sellAnywhere = true,     -- Allow selling to any ped anywhere
-  targetDistance = 3.0,    -- Interaction distance
-  targetIcon = 'fas fa-cannabis', -- Target icon
-  targetLabel = 'Sell Drugs',     -- Target label
-  
-  targets = {
-    peds = true,           -- Target NPCs/players
-    vehicles = false,      -- Target vehicles
-    objects = false,       -- Target objects
-    players = true         -- Target other players
-  }
-}
-```
-
-### 🚫 **NPC Filtering Configuration** (NEW in v2.6)
-```lua
-Config.NPCs = {
-  -- NPC Filtering System
-  filteringEnabled = true,  -- Enable NPC filtering (recommended)
-  filterMode = 'blacklist', -- 'blacklist' = block specific NPCs, 'whitelist' = only allow specific NPCs
-  
-  -- Blacklist: NPCs you CANNOT sell to
-  blacklistedModels = {
-    'mp_m_shopkeep_01',     -- Shop keepers
-    's_m_m_shopkeeper_01',  -- Store NPCs
-    'ig_manuel',            -- Gas station workers
-    'cs_hunter',            -- Ammunation clerks
-    'cs_carbuyer',          -- Car dealers
-    -- Add more as needed
-  },
-  
-  -- Additional filtering options
-  blockVehicleNPCs = true,        -- Don't allow selling to NPCs in vehicles
-  blockMissionNPCs = true,        -- Don't allow selling to mission-critical NPCs
-  minDistanceFromShops = 50.0,    -- Minimum distance from shops/stores to sell (0.0 to disable)
-}
-```
-
----
-
-## 🎮 **Commands Reference**
-
-### 🌿 **Player Commands**
-
-| Command | Description | Access |
-|---------|-------------|--------|
-| `/testminigame` | Test harvest minigame | Everyone |
-| `/bldr_test_nui` | Test NUI interface | Everyone |
-| `/checknpc` | Identify nearby NPC models | Everyone |
-
-### 🎨 **UI Customization Commands**
-
-| Command | Description | Example |
-|---------|-------------|---------|
-| `/bldr_setcolor [type] [hex]` | Set individual colors | `/bldr_setcolor primary #ff0000` |
-| `/bldr_setgradient [type] [css]` | Set custom gradients | `/bldr_setgradient panel linear-gradient(...)` |
-| `/bldr_showcolors` | Display current color configuration | `/bldr_showcolors` |
-| `/bldr_resetcolors` | Reset to default theme | `/bldr_resetcolors` |
-| `/bldr_savecolors` | Save current colors to config | `/bldr_savecolors` |
-
-### 🔧 **Admin Commands**
-
-| Command | Description | Permission |
-|---------|-------------|------------|
-| `/clearevodata [player_id] [drug]` | Clear evolution progress | `bldr.drugs.admin` |
-| `/dbcheck [player_id]` | Verify database evolution tables | `bldr.drugs.admin` |
-| `/setunlocked [player_id] [drug]` | Force unlock evolved drug | `bldr.drugs.admin` |
-| `/checkprogress [player_id]` | View player evolution progress | `bldr.drugs.admin` |
-| `/checkevolution [player_id]` | Check drug evolution progress | `bldr.drugs.admin` |
-| `/debugunlocks [player_id]` | View all evolution unlock states | `bldr.drugs.admin` |
-| `/forceunlock [player_id] [recipe]` | Manually unlock evolution recipe | `bldr.drugs.admin` |
-| `/adddrugxp [player_id] [amount]` | Give XP to player | `bldr.drugs.admin` |
-| `/checkdrugstats [player_id]` | Check player drug stats | `bldr.drugs.admin` |
-| `/drugdebug` | Toggle debug mode | `bldr.drugs.admin` |
-| `/testexactsyntax` | Test database connection | `bldr.drugs.admin` |
-
-### 📊 **Evolution Data Management Examples**
-
-```bash
-# Clear specific drug evolution data
-/clearevodata 1 meth              # Clear player 1's meth evolution
-/clearevodata 1 weed              # Clear player 1's weed evolution
-/clearevodata 1 cocaine           # Clear player 1's cocaine evolution
-/clearevodata 1 all               # Clear all evolution data for player 1
-
-# Check progress and debugging
-/checkevolution 1                 # See player 1's progress
-/dbcheck 1                        # Check database entries for player 1
-/testexactsyntax                  # Test database connection
-```
-
----
-
-## 🎮 **Admin Commands (Legacy)**
-
-### 💊 **XP Management**
-```bash
-/adddrugxp [player_id] [xp_amount]    # Give XP to player
-/checkdrugstats [player_id]           # Check player's drug stats
-```
-
-### 🚫 **NPC Filtering Tools** (NEW)
-```bash
-/checknpc                             # Identify nearby NPC models for blacklist
-```
-
-### 🐛 **Debug Controls**
-```bash
-/drugdebug                            # Toggle debug mode on/off
-```
-
-### 🎯 **Testing Commands**
-```bash
-/bldr_test_nui                        # Test NUI interface
-```
-
-### 🧪 **Evolution System Commands** (NEW in v2.7)
-```bash
-/checkevolution [player_id]           # Check drug evolution progress
-/debugunlocks [player_id]             # View all evolution unlock states
-/forceunlock [player_id] [recipe_key] # Manually unlock evolution recipes (admin)
-/clearevodata [player_id] [item]      # Clear evolution data for testing (admin)
-```
-
-### 🔧 **Data Management Commands** (NEW in v2.7)
-```bash
-# Clear specific drug evolution data
-/clearevodata [player_id] meth        # Clear meth evolution progress
-/clearevodata [player_id] weed        # Clear weed evolution progress  
-/clearevodata [player_id] cocaine     # Clear cocaine evolution progress
-/clearevodata [player_id] all         # Clear all evolution data
-
-# Testing and debugging
-/dbcheck [player_id]                  # Check database entries directly
-/testexactsyntax                      # Test database connection and syntax
-```
-
----
-
-## 🧬 **Drug Evolution System** (NEW in v2.7)
-
-### 🌟 **Overview**
-Transform your drug empire with the new **Evolution System**! As you sell drugs and build your reputation, unlock powerful evolved versions with better profits and enhanced effects.
-
-### 📈 **How It Works**
-- **Progress Tracking**: Every drug sale counts toward evolution thresholds
-- **Smart Notifications**: Get alerted at 75%, 90%, 95% completion and when unlocked
-- **Physical Crafting**: Use dedicated crafting tables to create evolved drugs
-- **Persistent Progress**: All progress saved across server restarts
-
-### 🎯 **Evolution Thresholds**
-| Drug Type | Sales Required | Evolved Recipe Unlocked | Evolved Product |
-|-----------|----------------|------------------------|-----------------|
-| 🌿 **Weed** | 25 sales | Enhanced Kush variants | Chronic Kush ($85) |
-| ❄️ **Cocaine** | 20 sales | Pure Colombian grade | Pure Colombian ($200) |
-| 🧪 **Meth** | 15 sales | Crystal blue formula | Blue Crystal ($300) |
-
-### 💎 **Evolved Drug Benefits**
-Once crafted, evolved drugs offer significant advantages:
-
-| Product | Base Price | XP Bonus | Success Rate | Level Req |
-|---------|------------|----------|--------------|-----------|
-| **Chronic Kush** | $85 (+70%) | 8 XP (+60%) | 96% | Level 1+ |
-| **Pure Colombian** | $200 (+67%) | 12 XP (+50%) | 88% | Level 3+ |
-| **Blue Crystal** | $300 (+67%) | 15 XP (+50%) | 83% | Level 4+ |
-
-### 🏭 **Crafting System**
-- **Physical Locations**: Find crafting tables at secret locations
-- **Third-Eye Integration**: Use qb-target to interact with crafting stations
-- **Recipe Requirements**: Need base drugs + evolution materials
-- **Progressive Unlocks**: Higher tier recipes require more sales
-- **Sellable Products**: All evolved drugs can be sold for higher profits
-
-### 📊 **Progress Notifications**
-Players receive automatic notifications at key milestones:
-- **75% Complete**: `"You're getting close to unlocking evolved weed! (18/25 sales)"`
-- **90% Complete**: `"Almost there! Just 2 more meth sales needed!"`
-- **95% Complete**: `"One more cocaine sale and you'll unlock the next tier!"`
-- **Unlocked**: `"🎉 Evolution unlocked! You can now craft enhanced cocaine!"`
-
-### 🔧 **Admin Management**
-Monitor and manage player progression:
-```bash
-# Check any player's evolution progress
-/checkevolution 1
-# Output: "Weed: 18/25 (72%) | Cocaine: 15/20 (75%) | Meth: 12/15 (80%)"
-
-# View all unlock states for debugging
-/debugunlocks 1  
-# Shows which recipes are LOCKED/UNLOCKED
-
-# Force unlock for testing
-/forceunlock 1 recipe_evo_meth_lvl1
-```
-
-### 📍 **Crafting Table Locations**
-Evolved drugs are crafted at special locations (configurable):
-- **Default Location**: Mirror Park area (customizable coordinates)
-- **Third-Eye Required**: qb-target integration for interactions
-- **Secure Access**: Only players with unlocked recipes can craft
-
-### 🎨 **Enhanced Notification System** (v2.7)
-**Improved notification styling for better visibility:**
-- **ox_lib Priority**: Uses ox_lib notifications when available for better styling
-- **Dark Backgrounds**: High contrast with white text for readability
-- **Color-Coded Borders**: Green (success), Red (error), Orange (warning)
-- **Custom Styling**: Enhanced evolution notifications with emojis and clear messaging
-- **Fallback Support**: Uses QBCore notifications if ox_lib unavailable
-
-**Configuration Options:**
-```lua
-Config.Evolution = {
-  notify = 'ox',                -- 'qb' | 'ox' | 'chat'
-  notifications = {
-    enabled = true,             -- Enable progress notifications
-    milestones = {75, 90, 95},  -- Notify at these percentages
-    nearUnlockThreshold = 95,   -- Special "almost there" message
-  }
-}
-```
-
----
-
-## 📊 **Enhanced Notifications**
-
-The system now provides detailed feedback for all transactions:
-
-### ✅ **Success Notifications**
-- `"Deal completed successfully! | Received $500 in marked bills 💰 | +15 XP 📈"`
-- `"Deal completed successfully! | Received $300 cash 💵 | +12 XP 📈"`
-- `"Deal completed successfully! | Received $800 dirty money 🖤 | +20 XP 📈"`
-
-### ❌ **Error Handling**
-- Proper error messages for all failure cases
-- Clear indication of why transactions fail
-- Helpful hints for resolving issues
-
----
-
-## 🛠️ **Installation**
-
-### 1. **Download & Extract**
-```bash
-# Extract to your resources folder
-resources/[standalone]/bldr-drugs/
-```
-
-### 2. **Database Setup**
-```sql
--- Run the migration.sql file
--- Creates bldr_drugs and bldr_drugs_logs tables
-```
-
-### 3. **Dependencies**
-```bash
-# Required
-qb-core
-oxmysql (or mysql-async)
-
-# Optional (for third-eye)
-qb-target OR ox_target
-```
-
-### 4. **Server Configuration**
-```lua
--- Add to server.cfg
-ensure bldr-drugs
-
--- Add items to qb-core/shared/items.lua
-['weed'] = {['name'] = 'weed', ['label'] = 'Weed', ['weight'] = 100, ['type'] = 'item', ['image'] = 'weed.png', ['unique'] = false, ['useable'] = true, ['shouldClose'] = true, ['combinable'] = nil, ['description'] = 'Some good quality weed.'},
-['ecstasy'] = {['name'] = 'ecstasy', ['label'] = 'Ecstasy', ['weight'] = 50, ['type'] = 'item', ['image'] = 'ecstasy.png', ['unique'] = false, ['useable'] = true, ['shouldClose'] = true, ['combinable'] = nil, ['description'] = 'Party pills for the night.'},
-['cocaine'] = {['name'] = 'cocaine', ['label'] = 'Cocaine', ['weight'] = 75, ['type'] = 'item', ['image'] = 'cocaine.png', ['unique'] = false, ['useable'] = true, ['shouldClose'] = true, ['combinable'] = nil, ['description'] = 'Pure white powder.'},
-['meth'] = {['name'] = 'meth', ['label'] = 'Meth', ['weight'] = 50, ['type'] = 'item', ['image'] = 'meth.png', ['unique'] = false, ['useable'] = true, ['shouldClose'] = true, ['combinable'] = nil, ['description'] = 'Crystal clear danger.'},
-['heroin'] = {['name'] = 'heroin', ['label'] = 'Heroin', ['weight'] = 60, ['type'] = 'item', ['image'] = 'heroin.png', ['unique'] = false, ['useable'] = true, ['shouldClose'] = true, ['combinable'] = nil, ['description'] = 'The most dangerous substance.'},
-['markedbills'] = {['name'] = 'markedbills', ['label'] = 'Marked Bills', ['weight'] = 10, ['type'] = 'item', ['image'] = 'markedbills.png', ['unique'] = true, ['useable'] = false, ['shouldClose'] = true, ['combinable'] = nil, ['description'] = 'Suspicious looking money.'},
-```
-
----
-
-## 🔧 **Troubleshooting**
-
-### ❌ **Common Issues**
-
-**"Processing transaction..." hangs forever**
-- Fixed in v2.5 - inventory parameter issue resolved
-- Restart the resource if you encounter this
-
-**NPCs not spawning**
-- Check if third-eye is enabled in config
-- Ensure you're not in a blacklisted zone
-- Verify NPC spawn settings in config
-
-**Third-eye not working**
-- Ensure qb-target or ox_target is installed
-- Check Config.ThirdEye.useQBTarget setting
-- Verify target distance settings
-
-**Debug spam in console**
-- Use `/drugdebug` command to toggle debug mode
-- Set `Config.Debug.enabled = false` in config.lua
-
-### 🐛 **Debug Information**
-- Enable debug mode to see detailed transaction logs
-- Check server console for error messages
-- Use `/checkdrugstats` to verify player data
-
----
-
-## 🎯 **Features Comparison**
-
-| Feature | BLDR-Drugs v2.5 | Other Scripts |
-|---------|------------------|---------------|
-| **NPC Interactions** | ✅ Smart looking, animations, reactions | ❌ Static NPCs |
-| **Third-Eye Integration** | ✅ Universal selling to anyone/anything | ❌ Limited locations |
-| **Money Types** | ✅ Cash, Bank, Black Money, Crypto, Markedbills | ❌ Cash only |
-| **UI Transparency** | ✅ See-through interface | ❌ Blocking UI |
-| **XP System** | ✅ 8 levels with multipliers | ❌ No progression |
-| **Debug Controls** | ✅ In-game toggle, detailed logging | ❌ Limited debugging |
-| **Error Handling** | ✅ Comprehensive error system | ❌ Basic errors |
-| **Notifications** | ✅ Detailed reward information | ❌ Basic messages |
-
----
-
-## 🤝 **Support & Updates**
-
-### 📧 **Getting Help**
-- Check the troubleshooting section first
-- Review the configuration options
-- Test with debug mode enabled
-
-### 🔄 **Version History**
-- **v2.7**: Drug Evolution System, crafting tables, progressive unlocks, admin tools
-- **v2.6**: Smart NPC filtering, anti-shop protection, blacklist system
-- **v2.5**: Enhanced NPC interactions, markedbills system, money types, debug controls
-- **v2.1**: Third-eye integration, UI improvements, zone protection
-- **v2.0**: Dynamic NPC system, XP progression, advanced UI
-- **v1.0**: Basic drug dealing functionality
-
----
-
-## 📜 **License**
-
-This project is licensed under a **Custom Commercial License** with the following terms:
-
-### **Permitted Uses:**
-✅ **Personal Use** - Free to use on your own server  
-✅ **Modification** - You can modify the code for your own use  
-✅ **Private Distribution** - Share with friends/community (non-commercial)  
-
-### **Restricted Uses:**
-❌ **Commercial Resale** - Cannot resell or distribute for profit WITHOUT written permission  
-❌ **Paid Access** - Cannot charge money for access to this script WITHOUT permission  
-❌ **Commercial Hosting** - Cannot use on paid hosting services WITHOUT permission  
-
-### **Commercial Permission:**
-💼 **Want to use commercially?** Contact the original authors for licensing agreements  
-📧 **Permission Required** - Written consent needed for any profit-generating use  
-💰 **Revenue Sharing** - Commercial licensing may require revenue sharing or fees  
-
-### **Attribution Required:**
-📋 **Copyright Notice** - Must include original author credits  
-📋 **License Text** - Must include this license with any distribution  
-🚫 **No Warranty** - Software provided "as-is" without warranty
-
-**For commercial licensing inquiries, contact: [Your Contact Information]**
-
-**Happy Dealing! 🌿💰**
-- **Price estimation** with risk assessment
-- **ESC key support** for quick closing
-- **Improved error handling** with retry mechanisms
-
-### 🛡️ **Advanced Security & Realism**
-- **Police proximity detection** - more cops = lower success rates
-- **Token-based transactions** prevent exploits and replays
-- **Rate limiting** with configurable cooldowns
-- **Comprehensive logging** for admin oversight
-- **Dynamic pricing** with market variations
-- **Auto-database migration** ensures proper table structure
-
----
-
-## 📋 **Requirements**
-
-### **Dependencies**
-- [`qb-core`](https://github.com/qbcore-framework/qb-core) - QBCore Framework
-- [`ox_lib`](https://github.com/overextended/ox_lib) - OX Library
-- [`oxmysql`](https://github.com/overextended/oxmysql) - MySQL Resource
-
-### **Server Requirements**
-- **FiveM Server** with artifact 6000+
-- **MySQL Database** (MariaDB 10.6+ recommended)
-- **QBCore Framework** (latest version)
-
----
-
-## 🚀 **Installation**
-
-### **1. Download & Extract**
-```bash
-# Clone or download the repository
-git clone https://github.com/your-repo/BDLR-Drugs-main
-```
-
-### **2. Database Setup (Automatic!)**
-The resource now handles database setup automatically! No manual SQL execution required.
-
-**Option 1 (Recommended): Automatic Setup**
-- Simply restart the resource: `restart bldr-drugs`  
-- Tables will be created/updated automatically
-- Missing columns will be added to existing tables
-
-**Option 2: Manual Setup (if needed)**
-If automatic setup fails, run the migration manually:
-```sql
-SOURCE path/to/bldr-drugs/sql/migration.sql;
--- OR use the column addition script:
-SOURCE path/to/bldr-drugs/sql/add_missing_columns.sql;
-```
-
-**Evolution System Database (NEW in v2.7)**
-The evolution system requires additional tables. Run this migration:
-```sql
--- For evolution system (new in v2.7)
-SOURCE path/to/bldr-drugs/sql/migration_evolution.sql;
-```
-
-This creates:
-- `drug_evolution_progress` - Tracks total revenue per player
-- `drug_evolution_unlocks` - Stores unlocked recipes and progress
-
-### **3. Server Configuration**
-Add to your `server.cfg`:
-```lua
+ensure oxmysql
+ensure ox_lib
+ensure qb-core
+ensure qb-target
 ensure bldr-drugs
 ```
 
-### **4. Item Configuration**
-Add drug items to your QBCore shared items:
-```lua
--- In qb-core/shared/items.lua
-
--- Standard Drug Items
-['weed'] = {['name'] = 'weed', ['label'] = 'Weed', ['weight'] = 100, ['type'] = 'item', ['image'] = 'weed.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'High quality street weed'},
-['cocaine'] = {['name'] = 'cocaine', ['label'] = 'Cocaine', ['weight'] = 50, ['type'] = 'item', ['image'] = 'cocaine.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Pure Colombian powder'},
-['heroin'] = {['name'] = 'heroin', ['label'] = 'Heroin', ['weight'] = 30, ['type'] = 'item', ['image'] = 'heroin.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'High grade black tar'},
-['meth'] = {['name'] = 'meth', ['label'] = 'Meth', ['weight'] = 40, ['type'] = 'item', ['image'] = 'meth.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Crystal blue persuasion'},
-['xtc'] = {['name'] = 'xtc', ['label'] = 'Ecstasy', ['weight'] = 20, ['type'] = 'item', ['image'] = 'xtc.png', ['unique'] = false, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Party pills for the night'},
-
--- Evolved Drug Items (NEW in v2.7) - Now with Dynamic Purity Display
-['evo_weed_chronic'] = {['name'] = 'evo_weed_chronic', ['label'] = 'Chronic Kush', ['weight'] = 80, ['type'] = 'item', ['image'] = 'chronic_kush.png', ['unique'] = true, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Premium evolved cannabis strain - Shows purity in inventory'},
-['evo_cocaine_pure'] = {['name'] = 'evo_cocaine_pure', ['label'] = 'Pure Colombian', ['weight'] = 40, ['type'] = 'item', ['image'] = 'pure_cocaine.png', ['unique'] = true, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Pharmaceutical grade cocaine - Shows purity in inventory'},
-['evo_meth_l1'] = {['name'] = 'evo_meth_l1', ['label'] = 'Blue Crystal', ['weight'] = 30, ['type'] = 'item', ['image'] = 'blue_crystal.png', ['unique'] = true, ['useable'] = false, ['shouldClose'] = false, ['description'] = 'Laboratory grade methamphetamine - Shows purity in inventory'}
-```
-
-### **5. Image Files Setup**
-Copy the evolved drug images from the `images/` folder to your inventory script:
-
-**For qb-inventory:**
-```bash
-# Copy images to qb-inventory
-Copy-Item "resources/[standalone]/bldr-drugs/images/*" "resources/[qb]/qb-inventory/html/images/"
-```
-
-**For ox_inventory:**
-```bash
-# Copy images to ox_inventory
-Copy-Item "resources/[standalone]/bldr-drugs/images/*" "resources/[ox]/ox_inventory/web/images/"
-```
-
-**Required Image Files (NEW in v2.7):**
-- `chronic_kush.png` - Evolved weed variant
-- `pure_cocaine.png` - Evolved cocaine variant
-- `blue_crystal.png` - Evolved meth variant
-
-**📁 Image Location:** All evolved drug image files are provided in the `images/` folder within this resource.
-
-**Note:** Standard drug images (weed, cocaine, heroin, meth, xtc) should already exist in your inventory system.
-
----
-
-## ⚙️ **Configuration**
-
-### **Main Settings** (`config.lua`)
-```lua
--- Debug system with multiple categories
-Config.Debug = {
-  enabled = false,             -- Master debug toggle
-  showNPCs = false,           -- NPC spawn/despawn info
-  showSales = false,          -- Sale transaction details
-  showPolice = false,         -- Police detection info
-  drawMarkers = false,        -- Visual NPC markers
-}
-
--- NPC Management
-Config.NPCs = {
-  maxActive = 15,             -- Max NPCs at once
-  spawnRadius = 500.0,        -- Spawn distance from player
-  despawnRadius = 600.0,      -- Despawn distance
-  checkInterval = 5000,       -- Spawn check frequency (ms)
-  lifetimeMin = 60000,        -- Min NPC lifetime (ms)
-  lifetimeMax = 180000,       -- Max NPC lifetime (ms)
-}
-```
-
-### **Item Customization**
-Each drug can be fully customized:
-```lua
-['cocaine'] = {
-  label = 'Cocaine',
-  basePrice = 120,            -- Base price per unit
-  priceVariation = 0.25,      -- ±25% price variation
-  xpPerUnit = 8,              -- XP gained per unit
-  minLevel = 2,               -- Required level
-  maxAmount = 25,             -- Max amount per transaction
-  successChance = 0.85,       -- Base success rate
-  policePenalty = 0.08,       -- Success reduction per cop
-}
-```
-
-### **Third-Eye Configuration**
-Complete control over the universal selling system:
-```lua
-Config.ThirdEye = {
-  enabled = false,                   -- Enable third-eye selling (disabled by default)
-  useQBTarget = true,               -- true for qb-target, false for ox_target
-  targetIcon = 'fa-solid fa-cannabis', -- Target interaction icon
-  targetLabel = 'Sell Drugs',      -- Target interaction label
-  targetDistance = 2.5,             -- Interaction range
-  
-  -- Target Types
-  targets = {
-    peds = true,                    -- Target NPCs
-    vehicles = false,               -- Target vehicles
-    objects = false,                -- Target objects (be careful!)
-  },
-  
-  -- Blacklisted Areas (no selling zones)
-  blacklistedZones = {
-    -- Add zones where selling should be prohibited
-    -- Example: { coords = vector3(441.8, -982.0, 30.68), radius = 50.0, name = "LSPD" }
-  },
-  
-  -- Object models that can be targeted (if objects enabled)
-  targetModels = {
-    -- Add prop hashes here if you want specific objects to be sellable
-  }
-}
-```
-
-### **Database Auto-Migration**
-The system now automatically creates and updates database tables:
-```lua
--- No manual SQL execution needed!
--- The resource automatically:
--- 1. Creates tables if they don't exist  
--- 2. Adds missing columns to existing tables
--- 3. Ensures proper indexing for performance
-```
-  description = 'Pure Colombian powder'
-}
-```
-
----
-
-## 🎮 **How to Play**
-
-### **For Players**
-
-#### **Traditional NPC Method**
-1. **Find NPCs**: Walk around the city to find drug buyers (green markers if debug enabled)
-2. **Approach**: Get close to an NPC and press `[E]` to approach
-3. **Request Session**: System will create a secure trading session
-
-#### **Third-Eye Universal Method** 🎯
-1. **Aim and Target**: Look at any NPC, player, or allowed object
-2. **Open Third-Eye**: Use your targeting system (default: Alt)
-3. **Select "Sell Drugs"**: Choose the drug dealing option from the menu
-4. **Trade Interface**: Same interface opens for seamless dealing
-5. **Sell Anywhere**: No need to find specific NPCs - sell to anyone!
-
-#### **Universal Steps (Both Methods)**
-4. **Select Items**: Choose from available drugs based on your level
-5. **Set Amount**: Use +/- buttons or type amount (respects maximums)
-6. **Make Deal**: Click "Make Deal" and watch the negotiation
-7. **Level Up**: Gain XP and unlock higher-tier drugs
-
-### **Progression Tips**
-- Start with **Weed** to build XP safely
-- Higher-tier drugs = more profit but more risk
-- Police presence reduces success rates
-- Level up to access better drugs and multipliers
-
----
-
-## 👨‍💼 **Admin Commands**
-
-### **Debug Commands**
-```lua
-/drugdebug                  -- Toggle debug mode on/off
-/bldr_debug_npcs           -- Show active NPC information
-```
-
-### **Player Management**
-```lua
-/adddrugxp [playerid] [amount]     -- Add XP to player
-/checkdrugstats [playerid]         -- View player statistics
-/checkevolution [playerid]         -- Check evolution progress (optional playerid for admins)
-```
-
-### **Admin Examples**
-```lua
-/adddrugxp 1 500          -- Give player ID 1 500 XP
-/checkdrugstats 1         -- Check stats for player ID 1
-/checkevolution           -- Check your own evolution progress
-/checkevolution 1         -- Check player ID 1's evolution progress (admin only)
-```
-
----
-
-## 📊 **Database Schema**
-
-### **Player XP Table** (`bldr_drugs`)
-```sql
-citizenid VARCHAR(50)     -- Player identifier
-xp INT                    -- Current XP
-total_sales INT           -- Total successful sales
-total_earned INT          -- Total money earned
-last_sale TIMESTAMP       -- Last sale timestamp
-created_at TIMESTAMP      -- Account creation
-updated_at TIMESTAMP      -- Last update
-```
-
-### **Transaction Logs** (`bldr_drugs_logs`)
-```sql
-id INT AUTO_INCREMENT     -- Unique log ID
-citizenid VARCHAR(50)     -- Player identifier
-item VARCHAR(100)         -- Drug sold
-amount INT                -- Quantity sold
-base_price INT            -- Base item price
-final_price INT           -- Final transaction price
-success TINYINT(1)        -- Success/failure
-reason VARCHAR(250)       -- Failure reason
-nearbyCops INT           -- Police count during sale
-success_chance DOUBLE     -- Calculated success rate
-created_at TIMESTAMP      -- Transaction time
-```
-
----
-
-## 🔧 **Advanced Features**
-
-### **Security Measures**
-- **Token-based transactions** prevent replay attacks
-- **Rate limiting** stops spam selling
-- **Server-side validation** for all transactions
-- **Comprehensive logging** for audit trails
-
-### **Performance Optimization**
-- **Efficient NPC management** with distance-based cleanup
-- **Optimized database queries** with proper indexing
-- **Smart spawning algorithms** to prevent server lag
-- **Memory management** for long-running sessions
-
-### **Customization Options**
-- **Fully configurable items** with individual properties
-- **Adjustable risk/reward ratios** per drug type
-- **Flexible NPC behavior settings**
-- **Customizable UI themes** and colors
-
----
-
-## 🛠️ **Troubleshooting**
-
-### **Common Issues**
-1. **NPCs not spawning**: Check debug mode and console for errors
-2. **Database errors**: Ensure SQL migration was run properly
-3. **UI not opening**: Verify all dependencies are loaded
-4. **Items not being removed**: Check QBCore item names match config
-
-### **Debug Mode**
-Enable debug mode to see detailed information:
-```lua
-/drugdebug  -- Toggle debug on/off
-```
-
-This will show:
-- NPC spawn/despawn information
-- Sale transaction details
-- Police detection results
-- XP calculations
-
----
-
-## 📈 **Performance & Scaling**
-
-### **Optimization Features**
-- **Smart NPC management** prevents server overload
-- **Database indexing** for fast queries
-- **Memory-efficient** state management
-- **Configurable limits** to control resource usage
-
-### **Recommended Settings**
-- **Small servers** (< 50 players): Default settings
-- **Medium servers** (50-100 players): Reduce `maxActive` NPCs to 10
-- **Large servers** (100+ players): Reduce to 8 NPCs, increase `checkInterval`
-
----
-
-## 🆕 **Recent Updates & Fixes**
-
-### **v2.1 - Enhanced Stability & UX**
-- ✅ **Fixed script errors** - Resolved ThirdEye config issues causing crashes
-- ✅ **Auto-database migration** - Automatic table creation and column updates
-- ✅ **Enhanced UI transparency** - See the world behind the interface
-- ✅ **ESC key support** - Press ESC to quickly close the UI
-- ✅ **Improved error handling** - Better JSON parsing and retry mechanisms
-- ✅ **Fixed duplicate callbacks** - Resolved 404 errors in UI requests
-- ✅ **Player stats initialization** - Proper XP loading on resource start
-- ✅ **Better debugging output** - Enhanced troubleshooting information
-
-### **v2.0 - Complete Overhaul**
-- ✅ Dynamic NPC system with intelligent AI
-- ✅ 5-tier drug progression system
-- ✅ Cyberpunk-style UI with animations
-- ✅ Enhanced security and anti-exploit measures
-- ✅ Comprehensive admin tools and statistics
-- ✅ Advanced debug system with multiple categories
-- ✅ Performance optimizations for large servers
-
----
-
-## 🛠️ **Troubleshooting**
-
-### **Fixed Issues**
-- ❌ ~~"attempt to index a nil value (field 'ThirdEye')"~~ ✅ **FIXED**
-- ❌ ~~"Unknown column 'total_sales' in field list"~~ ✅ **FIXED**  
-- ❌ ~~"Failed to get available items: HTTP 404"~~ ✅ **FIXED**
-- ❌ ~~UI transparency issues~~ ✅ **FIXED**
-- ❌ ~~Cancel button not working~~ ✅ **FIXED**
-
-### **Common Issues & Solutions**
-1. **NPCs not spawning**: Enable debug mode with `/drugdebug` and check console
-2. **Database errors**: Resource now auto-creates tables and columns
-3. **UI not opening**: Verify dependencies are loaded and restart resource  
-4. **Items not being removed**: Check QBCore item names match config exactly
-
----
-
-## 💡 **Support & Contributing**
-
-### **Getting Help**
-- 📖 Read this documentation thoroughly
-- 🐛 Check the [Issues](../../issues) page for known problems
-- 💬 Join our Discord for community support
-
-### **Contributing**
-We welcome contributions! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-### **Feature Requests**
-Have an idea for improvement? Open an issue with the `enhancement` label!
-
----
-
-## � **Changelog & Roadmap**
-
-### **🔥 Latest Updates (v2.1.0 - Current)**
-**Released: September 2025**
-
-#### **✅ Implemented Features:**
-- **💰 Advanced Money System**
-  - Markedbills support (80% chance by default)
-  - Multiple money types: Cash, Bank, Black Money, Crypto
-  - Configurable reward probabilities
-  - Enhanced notifications with reward details
-
-- **🎭 Enhanced NPC Interactions**
-  - NPCs stop and face player during transactions  
-  - Realistic conversation animations and gestures
-  - Post-sale reactions (wave goodbye, shrug on failure)
-  - Third-eye integration with automatic NPC facing
-
-- **🚫 NPC Cooldown System**
-  - 5-minute cooldown per NPC after successful sale
-  - Visual markers (red for cooldown, green for available)
-  - Real-time countdown timers
-  - Smart blocking of repeat interactions
-
-- **🐛 Debug System Overhaul**
-  - Master debug toggle (disabled by default)
-  - In-game `/drugdebug` command for admins
-  - Categorized debug output for better troubleshooting
-  - Cleaner console output in production
-
-- **🔧 Technical Improvements**
-  - Fixed inventory integration errors
-  - Automatic database schema management
-  - ESX compatibility for black money
-  - Enhanced error handling and logging
-
----
-
-### **🚀 Coming Soon (v2.2.0 - Next Update)**
-**Expected: October 2025**
-
-#### **🔮 Planned Features:**
-- **🏠 Territory System**
-  - Gang territories with different profit multipliers
-  - Territory control mechanics
-  - Rival gang encounters and disputes
-  - Territory expansion through successful dealing
-
-- **📱 Burner Phone Integration**
-  - Anonymous drug orders via phone
-  - Text message based dealing system
-  - Encrypted communication channels
-  - Drop-off location coordination
-
-- **🎭 Advanced NPC AI**
-  - NPC personality types (cautious, eager, suspicious)
-  - Dynamic pricing based on NPC wealth
-  - NPC reputation system
-  - Word-of-mouth referral system
-
-#### **⚡ Performance Enhancements:**
-- **🎯 Optimized Spawning**
-  - Smart NPC population based on server load
-  - Distance-based LOD for better performance
-  - Memory-efficient entity management
-
----
-
-### **🌟 Future Roadmap (v3.0.0+)**
-**Expected: Q1 2026**
-
-#### **🏗️ Major Systems:**
-- **🏭 Drug Manufacturing**
-  - Multi-step drug creation process
-  - Resource gathering and processing
-  - Quality control affecting prices
-  - Laboratory setup and management
-
-- **🚓 Advanced Police System**
-  - Dynamic police response scaling
-  - Undercover operations
-  - Drug busts and evidence collection
-  - Witness protection and snitching mechanics
-
-- **🌐 Multi-Server Support**
-  - Cross-server drug trading
-  - Shared reputation systems
-  - Global leaderboards
-  - Inter-server gang conflicts
-
-#### **📊 Analytics & Management:**
-- **📈 Business Metrics Dashboard**
-  - Profit/loss tracking
-  - Market trend analysis
-  - Customer loyalty metrics
-  - Risk assessment tools
-
-- **🎨 UI/UX Overhaul**
-  - Modern React-based interface
-  - Mobile-responsive design
-  - Customizable themes
-  - Accessibility improvements
-
----
-
-### **📋 Version History**
-
-#### **v2.0.0** *(Major Release - August 2025)*
-- Complete rewrite with modern architecture
-- Third-eye integration and ThirdEye support
-- Leveling system with XP and multipliers
-- Advanced debugging and logging systems
-
-#### **v1.5.0** *(Feature Update - July 2025)*
-- Police detection system
-- Blacklisted zones for selling
-- Rate limiting and cooldown systems
-- Enhanced security measures
-
-#### **v1.0.0** *(Initial Release - June 2025)*
-- Basic drug selling functionality
-- NPC interaction system
-- Simple economy mechanics
-- QBCore integration
-
----
-
-### **🤝 How to Contribute**
-Want to help shape the future of BDLR-Drugs? Here's how:
-
-1. **🗳️ Vote on Features** - Join our Discord to vote on upcoming features
-2. **🐛 Report Bugs** - Help us identify and fix issues
-3. **💡 Suggest Ideas** - Share your creative ideas for new features  
-4. **💻 Code Contributions** - Submit pull requests for improvements
-5. **📚 Documentation** - Help improve guides and tutorials
-6. **🎮 Beta Testing** - Test new features before public release
-
----
-
-## 📋 **Detailed Technical Changelog**
-
-### **v2.7.0 - Evolution System Release** *(October 2025)*
-
-#### **🆕 New Files & Components**
-- **SQL Migration Scripts**: 
-  - `sql/add_missing_columns.sql` - Database structure updates
-  - `sql/migration_evolution.sql` - Evolution system tables
-- **Evolution Functions**: Complete evolution tracking system in `server.lua`
-- **Enhanced Notifications**: Improved CustomNotify function with ox_lib integration
-
-#### **🔧 Core System Changes**
-
-**server.lua Enhancements:**
-- **New Functions Added**:
-  - `evoTryUnlocks()` - Check and trigger evolution unlocks
-  - `evoSetUnlocked()` - Mark evolution as unlocked for player
-  - `evoIsUnlocked()` - Check if player has evolution unlocked
-  - `CustomNotify()` - Enhanced notification system with ox_lib priority
-- **Admin Commands Added**:
-  - `/clearevodata [player_id]` - Clear evolution progress
-  - `/dbcheck` - Verify database tables
-  - `/setunlocked [player_id] [drug]` - Force unlock evolutions
-  - `/checkprogress [player_id]` - View evolution progress
-- **Database Integration**: MySQL queries for persistent evolution tracking
-- **Debug System**: Comprehensive logging for evolution events
-
-**client.lua Improvements:**
-- **Enhanced CustomNotify**: Better styling with dark backgrounds and ox_lib fallback
-- **Crafting Table Integration**: qb-target interactions for evolution crafting
-- **Improved Error Handling**: Better function availability checks
-
-**config.lua Additions:**
-- **Evolution Configuration**: Thresholds, notifications, and styling options
-- **Evolved Drug Pricing**: Premium pricing for evolved variants
-- **Sellable Items**: Added evolved drugs to sellable items list
-
-#### **🗃️ Database Schema Changes**
-```sql
--- New Tables Added:
-CREATE TABLE `drug_evolution_progress` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `citizenid` varchar(50) NOT NULL,
-  `drug_type` varchar(50) NOT NULL,
-  `sales_count` int(11) DEFAULT 0,
-  `total_revenue` decimal(10,2) DEFAULT 0.00,
-  `last_updated` timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `unique_player_drug` (`citizenid`,`drug_type`)
-);
-
-CREATE TABLE `drug_evolution_unlocks` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `citizenid` varchar(50) NOT NULL,
-  `drug_type` varchar(50) NOT NULL,
-  `unlocked_at` timestamp DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `unique_unlock` (`citizenid`,`drug_type`)
-);
-```
-
-#### **🎨 UI/UX Improvements**
-- **Notification Styling**: Dark backgrounds with improved text visibility
-- **ox_lib Integration**: Better notification positioning and styling
-- **Progress Indicators**: Visual feedback for evolution milestones
-- **Responsive Design**: Consistent experience across notification types
-
-#### **⚡ Performance Optimizations**
-- **Efficient Database Queries**: Optimized evolution tracking queries
-- **Smart Caching**: Reduced database calls with intelligent caching
-- **Error Handling**: Improved error catching and logging
-- **Resource Management**: Better memory usage and cleanup
-
-#### **🛠️ Bug Fixes & Stability**
-- **Function Order**: Fixed dependency issues between functions
-- **Database Type Handling**: Resolved boolean/integer unlock detection
-- **Notification Reliability**: Enhanced notification delivery system
-- **Error Prevention**: Added comprehensive error checking
-
-#### **📚 Documentation Updates**
-- **Complete Evolution Guide**: Detailed setup and configuration instructions
-- **Admin Command Reference**: Comprehensive command documentation
-- **Item Configuration**: Updated item definitions with evolved variants
-- **Troubleshooting Guide**: Common issues and solutions
-
-### **Previous Versions**
-- **v2.6.0**: Smart NPC filtering system, enhanced interaction detection
-- **v2.5.0**: Third-eye integration, universal selling system
-- **v2.4.0**: Advanced UI redesign, cyberpunk styling
-- **v2.3.0**: XP system, reputation mechanics
-- **v2.2.0**: Police integration, wanted system
-- **v2.1.0**: Territory control, location-based dealing
-- **v2.0.0**: Complete system rewrite, QBCore integration
-
----
-
-## 📜 **License**
-
-This project is licensed under a **Custom Commercial License** - see above for details.
-
-**Commercial use requires written permission from the original authors.**
-
----
-
-**🌟 Made with ❤️ by Blakethepet, Negan, and BLDR CHAT**
-
-*Transform your FiveM server with the most advanced drug dealing system available!*
+If you use `ox_target` instead of `qb-target`, keep `ox_target` ensured and set `Config.ThirdEye.useQBTarget = false`.
+
+## Core Features
+
+### Selling Flow
+
+- Dynamic NPC dealing with up to 15 active peds by default
+- Token-based server validation for sell actions
+- XP, rank title, and payout multipliers based on player progression
+- Optional marked bills payout instead of direct money
+- Sale cooldowns and per-minute rate limiting
+
+### Third-Eye Selling
+
+- Enabled by default in `Config.ThirdEye`
+- Works with qb-target or ox_target
+- Supports ped targeting out of the box
+- Blacklisted zones can block selling in protected areas
+
+### Robbery System
+
+The robbery system is enabled by default and can interrupt otherwise successful sales.
+
+Default behavior:
+
+- Selected preset: `medium`
+- Robbery chance: 15%
+- Cash theft enabled
+- Item theft enabled
+- Peaceful handover enabled
+- Dispatch enabled
+- Sale cancelled when robbery triggers
+
+Presets available:
+
+- `easy`
+- `medium`
+- `hard`
+- `custom`
+
+Important config entries:
+
+- `Config.Robbery.selectedPreset`
+- `Config.Robbery.chance`
+- `Config.Robbery.attackPlayer`
+- `Config.Robbery.fightBackIfAttacked`
+- `Config.Robbery.canStealCash`
+- `Config.Robbery.canStealItems`
+- `Config.Robbery.maxCashStolen`
+- `Config.Robbery.dispatchEnabled`
+- `Config.Robbery.cancelSaleOnRobbery`
+
+### Hot Zones
+
+Hot zones are enabled by default and are enforced server-side.
+
+Default zones in `config.lua`:
+
+- Forum Drive Turf
+- Davis Cut
+- Rancho Projects
+
+Each zone can define:
+
+- `priceMultiplier`
+- `xpMultiplier`
+- `successChanceBonus`
+- `radius`
+- `blip`
+
+### Evolution System
+
+Evolution is enabled by default and tracks player progress in MySQL.
+
+Default unlock thresholds:
+
+- Sell 25 `weed` to unlock `recipe_evo_weed_lvl1`
+- Sell 20 `cocaine` to unlock `recipe_evo_cocaine_lvl1`
+- Sell 15 `meth` to unlock `recipe_evo_meth_lvl1`
+
+Default progress notifications:
+
+- 75%
+- 90%
+- 95%
+
+Default evolved products:
+
+| Item | Label | Base Price | XP | Min Level |
+|------|-------|------------|----|-----------|
+| `evo_weed_chronic` | Chronic Kush | 68 | 6 | 1 |
+| `evo_cocaine_pure` | Pure Colombian | 165 | 10 | 3 |
+| `evo_meth_l1` | Blue Crystal | 235 | 12 | 4 |
+
+Crafting notes:
+
+- Available recipes come from both `Config.Evolution.recipes` and admin-created recipes
+- Custom recipes are stored in `bldr_drug_recipes`
+- Crafting tables come from admin-created table entries and synced creator data
+- Crafted evolved items currently still receive purity metadata in the item info
+
+### Admin Creator
+
+The admin creator is enabled by default.
+
+It allows admins to create and persist:
+
+- Custom sellable drug items
+- Custom crafting recipes
+- Custom world crafting tables
+
+Creator defaults:
+
+- Command: `drugcreator`
+- Allowed QBCore groups: `admin`, `god`
+- Optional ACE permission support via `Config.Creator.useAce`
+- ACE name if enabled: `bldr.drugcreator`
+
+Stored tables:
+
+- `bldr_drug_items`
+- `bldr_drug_recipes`
+- `bldr_drug_tables`
+
+### UI Customization
+
+The resource ships with theme controls for the drug UI.
+
+Config sections:
+
+- `Config.UI.colors`
+- `Config.UI.gradients`
+- `Config.Notifications`
+
+Supported built-in command controls:
+
+- `/bldr_setcolor`
+- `/bldr_setgradient`
+- `/bldr_showcolors`
+- `/bldr_resetcolors`
+- `/bldr_savecolors`
+
+## Default Sellable Items
+
+These are the hardcoded defaults in `Config.Items`. Admin-created items can extend or override them.
+
+| Item | Label | Base Price | XP | Min Level | Max Amount |
+|------|-------|------------|----|-----------|------------|
+| `weed` | Weed | 42 | 4 | 0 | 40 |
+| `xtc` | Ecstasy | 70 | 5 | 1 | 24 |
+| `cocaine` | Cocaine | 105 | 7 | 2 | 20 |
+| `meth` | Meth | 155 | 9 | 3 | 16 |
+| `heroin` | Heroin | 170 | 10 | 4 | 12 |
+
+## Progression Levels
+
+| Level | Title | XP | Multiplier |
+|------|-------|----|------------|
+| 0 | Street Rookie | 0 | 1.0 |
+| 1 | Corner Dealer | 100 | 1.05 |
+| 2 | Block Runner | 300 | 1.12 |
+| 3 | Neighborhood Pusher | 700 | 1.2 |
+| 4 | District Supplier | 1500 | 1.35 |
+| 5 | City Kingpin | 3000 | 1.5 |
+| 6 | Regional Boss | 6000 | 1.75 |
+| 7 | Drug Lord | 12000 | 2.0 |
+
+## Economy and Security Defaults
+
+Economy:
+
+- `Config.Economy.globalPriceMultiplier = 0.92`
+- `Config.Economy.xpMultiplier = 0.9`
+- `Config.Economy.maxPayoutPerSale = 8500`
+- `Config.Economy.maxXPGainPerSale = 250`
+
+Security:
+
+- `Config.Security.enabled = true`
+- `Config.Security.maxClientCoordOffset = 20.0`
+- `Config.Security.maxItemNameLength = 64`
+- `Config.Security.minFinalPrice = 1`
+- `Config.Security.rejectInvalidCoords = true`
+
+## Commands
+
+### Player Commands
+
+| Command | Description |
+|---------|-------------|
+| `/checkevolution` | Check your evolution progress if enabled in config |
+| `/checknpc` | Print nearby NPC model info for blacklist tuning |
+| `/bldr_setcolor [type] [hex]` | Change a UI color |
+| `/bldr_setgradient [type] [css]` | Change a UI gradient |
+| `/bldr_showcolors` | Show current UI colors |
+| `/bldr_resetcolors` | Reset UI theme to defaults |
+| `/bldr_savecolors` | Save current UI color choices |
+
+### Admin Commands
+
+These use QBCore admin command permissions unless noted otherwise.
+
+| Command | Description |
+|---------|-------------|
+| `/drugcreator` | Open the admin creator UI |
+| `/forcerobme` | Force a robbery test |
+| `/adddrugxp [id] [xp]` | Add drug XP to a player |
+| `/checkdrugstats [id]` | Show stored XP and sales stats |
+| `/drugdebug` | Toggle debug mode |
+| `/testevorecord [id] [item] [amount] [revenue]` | Record test evolution progress |
+| `/testevounlock [id] [revenue|count] [item] [amount]` | Push an evolution unlock toward completion |
+| `/testevocraft [id] [recipe_key]` | Trigger evolution crafting for testing |
+| `/debugunlocks [id]` | Print unlock state rows |
+| `/testexactsyntax` | Test the unlock insert query |
+| `/simpledbtest` | Run a simple DB health test |
+| `/dbtest` | Test evolution table access |
+| `/dbcheck [id]` | Read raw unlock rows for a player |
+| `/checkevolution [id]` | Check another player's progress as admin |
+| `/clearevodata [id] [weed|cocaine|meth|all]` | Clear evolution data |
+| `/forceunlock [id] [recipe_key]` | Force unlock a recipe |
+
+### Developer and Local Debug Commands
+
+These are present in `client.lua` for testing and troubleshooting:
+
+- `/testrobbery`
+- `/bldr_request_token`
+- `/bldr_debug_npcs`
+- `/bldr_testprop`
+- `/bldr_fix_ui`
+- `/bldr_debug_resource`
+- `/bldr_test_nui`
+
+## Database Tables
+
+Core:
+
+- `bldr_drugs`
+- `bldr_drugs_logs`
+
+Evolution:
+
+- `drug_evolution_progress`
+- `drug_evolution_unlocks`
+
+Creator:
+
+- `bldr_drug_items`
+- `bldr_drug_recipes`
+- `bldr_drug_tables`
+
+## Upgrade Notes
+
+If you are updating an older install:
+
+1. Run `sql/add_missing_columns.sql` to add the newer XP and log columns.
+2. Run `sql/migration_evolution.sql` if you are enabling or migrating evolution.
+3. Run `sql/admin_creator.sql` if you want the in-game creator features.
+4. Review `Config.Robbery.selectedPreset`, `Config.HotZones`, and `Config.Creator` because these are now major gameplay systems.
+
+## Notes
+
+- There is no git history in this workspace, so this README reflects the current codebase state rather than commit-by-commit changes.
+- The previous README had outdated prices, milestones, permissions, and setup notes. This version was aligned to `fxmanifest.lua`, `config.lua`, `server.lua`, and the shipped SQL files.

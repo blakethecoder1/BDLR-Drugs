@@ -4,7 +4,8 @@ let currentPlayerData = {
   level: 0,
   title: 'Street Rookie',
   xp: 0,
-  nextLevelXP: 100
+  nextLevelXP: 100,
+  hotZone: null
 };
 let selectedItem = null;
 let nuiDebug = false;
@@ -129,6 +130,10 @@ function formatPrice(price) {
   return '$' + price.toLocaleString();
 }
 
+function formatMultiplier(value) {
+  return `x${Number(value || 1).toFixed(2)}`;
+}
+
 function updatePlayerInfo(data) {
   currentPlayerData = { ...currentPlayerData, ...data };
   
@@ -149,6 +154,35 @@ function updatePlayerInfo(data) {
   
   xpProgress.style.width = `${Math.max(0, Math.min(100, progress))}%`;
   xpText.textContent = `${currentXP} / ${nextLevelXP} XP`;
+
+  updateHotZoneInfo(currentPlayerData.hotZone);
+}
+
+function updateHotZoneInfo(zone) {
+  currentPlayerData.hotZone = zone || null;
+
+  const banner = document.getElementById('hotZoneBanner');
+  const nameEl = document.getElementById('hotZoneName');
+  const boostEl = document.getElementById('hotZoneBoost');
+  const hintEl = document.getElementById('hotZoneHint');
+
+  if (!banner || !nameEl || !boostEl || !hintEl) {
+    return;
+  }
+
+  if (zone) {
+    banner.classList.add('active');
+    nameEl.textContent = zone.name || 'Hot Zone';
+    boostEl.textContent = `Cash ${formatMultiplier(zone.priceMultiplier)} | XP ${formatMultiplier(zone.xpMultiplier)}`;
+    hintEl.textContent = `Success bonus ${Math.round((Number(zone.successChanceBonus || 0) * 100))}% while you stay inside the zone.`;
+  } else {
+    banner.classList.remove('active');
+    nameEl.textContent = 'Standard Street Rates';
+    boostEl.textContent = 'No active bonus';
+    hintEl.textContent = 'Move into a hot zone for boosted cash, XP, and better close rates.';
+  }
+
+  updatePriceEstimate();
 }
 
 function updateItemDescription() {
@@ -175,7 +209,8 @@ function updatePriceEstimate() {
   if (selectedItem && amount > 0) {
     // Simple price estimation (server does actual calculation)
     const basePrice = selectedItem.basePrice * amount;
-    const estimatedPrice = Math.floor(basePrice * 1.1); // Rough estimate
+    const priceMultiplier = currentPlayerData.hotZone && currentPlayerData.hotZone.priceMultiplier ? currentPlayerData.hotZone.priceMultiplier : 1;
+    const estimatedPrice = Math.floor(basePrice * 1.1 * priceMultiplier); // Rough estimate
     
     estimatedPriceEl.textContent = formatPrice(estimatedPrice);
     
@@ -270,9 +305,12 @@ window.addEventListener('message', (event) => {
         level: data.playerLevel,
         title: data.playerTitle,
         xp: data.playerXP,
-        nextLevelXP: data.nextLevelXP
+        nextLevelXP: data.nextLevelXP,
+        hotZone: data.hotZone || null
       });
     }
+
+    updateHotZoneInfo(data.hotZone || null);
     
     // Request available items with retry mechanism (delayed start)
     debugLog('UI opened, requesting available items...');
@@ -310,6 +348,8 @@ window.addEventListener('message', (event) => {
   } else if (data.action === 'close') {
     if (autoCloseTimer) clearTimeout(autoCloseTimer); // Clear timer
     closeUI();
+  } else if (data.action === 'setHotZone') {
+    updateHotZoneInfo(data.hotZone || null);
   }
 });
 

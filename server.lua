@@ -378,12 +378,39 @@ local function sanitizeSaleCoords(src, rawCoords)
   return saleCoords
 end
 
-local function calculatePrice(itemConfig, amount, level, multiplier)
+local function getActiveHotZone(coords)
+  if not coords or not Config.HotZones or not Config.HotZones.enabled or not Config.HotZones.zones then
+    return nil
+  end
+
+  local closestZone = nil
+  local closestDistance = nil
+
+  for _, zone in pairs(Config.HotZones.zones) do
+    if zone.coords and zone.radius then
+      local distance = #(coords - zone.coords)
+      if distance <= zone.radius and (not closestDistance or distance < closestDistance) then
+        closestDistance = distance
+        closestZone = {
+          name = zone.name or 'Hot Zone',
+          priceMultiplier = tonumber(zone.priceMultiplier) or Config.HotZones.defaultPriceMultiplier or 1.0,
+          xpMultiplier = tonumber(zone.xpMultiplier) or Config.HotZones.defaultXPMultiplier or 1.0,
+          successChanceBonus = tonumber(zone.successChanceBonus) or Config.HotZones.defaultSuccessChanceBonus or 0.0
+        }
+      end
+    end
+  end
+
+  return closestZone
+end
+
+local function calculatePrice(itemConfig, amount, level, multiplier, zonePriceMultiplier)
   local basePrice = itemConfig.basePrice * amount
   local variation = itemConfig.priceVariation or 0.2
   local variationMultiplier = 1 + (math.random() * variation * 2 - variation) -- +/- variation
   local globalMultiplier = (Config.Economy and Config.Economy.globalPriceMultiplier) or 1.0
-  local finalPrice = math.floor(basePrice * variationMultiplier * multiplier * globalMultiplier)
+  local hotZoneMultiplier = tonumber(zonePriceMultiplier) or 1.0
+  local finalPrice = math.floor(basePrice * variationMultiplier * multiplier * globalMultiplier * hotZoneMultiplier)
 
   local maxPayout = Config.Economy and Config.Economy.maxPayoutPerSale
   if maxPayout and finalPrice > maxPayout then
@@ -395,8 +422,8 @@ local function calculatePrice(itemConfig, amount, level, multiplier)
     finalPrice = minFinalPrice
   end
   
-  debugPrint('sales', 'Price calculation:', 'base=', basePrice, 'variation=', variationMultiplier, 'multiplier=', multiplier, 'global=', globalMultiplier, 'final=', finalPrice)
-  return finalPrice, basePrice, variationMultiplier, globalMultiplier
+  debugPrint('sales', 'Price calculation:', 'base=', basePrice, 'variation=', variationMultiplier, 'multiplier=', multiplier, 'global=', globalMultiplier, 'hotZone=', hotZoneMultiplier, 'final=', finalPrice)
+  return finalPrice, basePrice, variationMultiplier, globalMultiplier, hotZoneMultiplier
 end
 
 -- XP and level helpers
@@ -1065,6 +1092,10 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
   end
 
   local coords = { x = saleCoords.x, y = saleCoords.y, z = saleCoords.z }
+  local hotZone = getActiveHotZone(saleCoords)
+  local hotZonePriceMultiplier = hotZone and hotZone.priceMultiplier or 1.0
+  local hotZoneXPMultiplier = hotZone and hotZone.xpMultiplier or 1.0
+  local hotZoneSuccessBonus = hotZone and hotZone.successChanceBonus or 0.0
   local players = QBCore.Functions.GetQBPlayers()
   
   for playerId, PolicePlayer in pairs(players) do
@@ -1085,10 +1116,14 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
   -- Calculate success chance
   local baseChance = itemConfig.successChance or 0.95
   local policePenalty = copsNearby * (itemConfig.policePenalty or 0.05)
-  local successChance = math.max(0.1, baseChance - policePenalty) -- Minimum 10% chance
+  local successChance = math.max(0.1, math.min(0.99, baseChance - policePenalty + hotZoneSuccessBonus))
   
   -- Price calculation
-  local finalPrice, basePrice, variationMultiplier, globalMultiplier = calculatePrice(itemConfig, amount, level, multiplier)
+  local finalPrice, basePrice, variationMultiplier, globalMultiplier, appliedZonePriceMultiplier = calculatePrice(itemConfig, amount, level, multiplier, hotZonePriceMultiplier)
+
+  if hotZone then
+    debugPrint('sales', 'Hot zone active for sale:', hotZone.name, 'price x', hotZonePriceMultiplier, 'xp x', hotZoneXPMultiplier, 'success bonus', hotZoneSuccessBonus)
+  end
   
   -- Success roll
   local rand = math.random()
@@ -1222,7 +1257,7 @@ QBCore.Functions.CreateCallback(Config.ResourceName..':completeSale', function(s
 end
       
       local xpMultiplier = (Config.Economy and Config.Economy.xpMultiplier) or 1.0
-      xpGain = math.floor(((itemConfig.xpPerUnit or 5) * amount) * xpMultiplier)
+      xpGain = math.floor(((itemConfig.xpPerUnit or 5) * amount) * xpMultiplier * hotZoneXPMultiplier)
       if xpGain < 1 then xpGain = 1 end
 
       local maxXPGain = Config.Economy and Config.Economy.maxXPGainPerSale
@@ -1262,7 +1297,7 @@ end
     rewardType = rewardType,
     unitPrice = math.floor(finalPrice / math.max(amount, 1)),
     variationMultiplier = variationMultiplier,
-    levelMultiplier = multiplier * globalMultiplier,
+    levelMultiplier = multiplier * globalMultiplier * appliedZonePriceMultiplier,
     xpEarned = xpGain,
     levelBefore = level,
     levelAfter = getPlayerLevel(getXP(cid)),
@@ -1291,7 +1326,8 @@ end
     reason = reasonFail,
     xpGained = xpGain,
     moneyEarned = success and finalPrice or 0,
-    reward = rewardInfo
+    reward = rewardInfo,
+    hotZone = hotZone
   })
 end)
 
